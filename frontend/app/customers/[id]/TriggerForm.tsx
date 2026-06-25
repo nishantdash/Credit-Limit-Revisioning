@@ -2,6 +2,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, Decision } from "../../../lib/api";
+import { Icon } from "../../../components/Icon";
+import { Pill } from "../../../components/Pill";
 
 const EVENT_TYPES = [
   { value: "CARD_UTILIZATION_THRESHOLD", label: "Utilisation threshold (>80%)" },
@@ -35,22 +37,20 @@ export function TriggerForm({ cardId }: { cardId: string }) {
   }
 
   return (
-    <div className="card">
-      <div className="row" style={{ gap: 12 }}>
-        <select value={event} onChange={(e) => setEvent(e.target.value)} style={{ maxWidth: 320 }}>
-          {EVENT_TYPES.map((e) => <option key={e.value} value={e.value}>{e.label}</option>)}
-        </select>
-        <button className="btn btn-primary" onClick={fire} disabled={loading}>
-          {loading ? "Firing…" : "Fire event"}
-        </button>
-      </div>
+    <>
+      <select value={event} onChange={(e) => setEvent(e.target.value)} style={{ marginBottom: 10 }}>
+        {EVENT_TYPES.map((e) => <option key={e.value} value={e.value}>{e.label}</option>)}
+      </select>
+      <button className="btn btn-primary" style={{ width: "100%" }} onClick={fire} disabled={loading}>
+        <Icon name="play" size={14} /> {loading ? "Firing…" : "Fire event"}
+      </button>
       {result && (
-        <div className="metric-sub" style={{ marginTop: 12 }}>
-          Decision <strong>{result.id}</strong> — <span className={`badge badge-${result.decision}`}>{result.decision}</span>
-          {result.hitl_required ? " — sent to HITL queue" : " — auto-executed"}
+        <div style={{ marginTop: 12, fontSize: 12 }} className="muted">
+          <Pill variant={result.decision}>{result.decision}</Pill>{" "}
+          {result.hitl_required ? "sent to HITL queue" : "auto-executed"}
         </div>
       )}
-      {error && <div className="metric-sub" style={{ color: "var(--red)", marginTop: 12 }}>{error}</div>}
-    </div>
+      {error && <div style={{ color: "var(--red)", fontSize: 12, marginTop: 10 }}>{error}</div>}
+    </>
   );
 }
