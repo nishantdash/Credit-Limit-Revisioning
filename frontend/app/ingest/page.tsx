@@ -31,8 +31,8 @@ export default function IngestPage() {
                 <div className="reasons" style={{ marginTop: 4 }}>
                   <span className="chip">timestamp</span>
                   <span className="chip">amount</span>
+                  <span className="chip">category_class</span>
                   <span className="chip">merchant_category</span>
-                  <span className="chip">merchant_tier</span>
                   <span className="chip">merchant_city</span>
                 </div>
               </div>

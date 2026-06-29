@@ -1,78 +1,156 @@
-# CLR — Credit Limit Revisioning Engine (prototype)
+# CLR — Intent-Driven Credit Limit Revisioning Engine
 
-Runnable prototype of the 7-layer architecture described in
-`CLR_ProductBrainstorm_ClaudeCode.md`. Demonstrates the full event → decision →
-HITL → atomic write-back loop with seeded mock customers.
+A runnable prototype of the architecture in
+[`Credit_Limit_Revisioning_Concept_Note.md`](./Credit_Limit_Revisioning_Concept_Note.md):
+a real-time, **intent-driven** credit-limit revisioning engine that disambiguates
+**growth vs distress vs seasonal**, emits a four-part decision (**direction,
+magnitude, duration, confidence**), and orchestrates **consent-asymmetric**
+offer/action pipelines on India's AA + DPDP + RBI rails.
 
-## What's in the box
+It is delivered as a **configurable SaaS product** — one codebase, three
+tenant archetypes (Bank / NBFC / SFB) selectable at runtime.
 
-| Layer | Brief | Prototype implementation |
+## What makes this different from a conventional engine
+
+The orthodox Indian model asks *"how risky is this customer?"* and emits a single
+new-limit number, one-directionally, on a quarterly batch. This engine asks
+*"what is this customer trying to do right now, and why?"* and acts differently
+for a customer who is growing versus one who is sliding.
+
+| | Conventional | This engine |
 |---|---|---|
-| L1 — Data ingestion | AA / CBS / UPI / GST signals | `seed.py` loads 15 customer archetypes with income signals + 90 days of transactions; `/webhooks/hyperface/event` is the inbound Hyperface stream contract from §9; `/ingest/transactions-csv` accepts a bank CSV dump for piloting against a hand-picked customer cohort |
-| L2 — AI engine | Behavioral, income, risk, GenAI explainer | `engine/behavioral.py`, `engine/income.py`, `engine/risk.py`, `engine/explainer.py` — closed-form proxies in place of PySpark / XGBoost / LLM so the demo is hermetic |
-| L3 — Decision engine | Policy guardrails, limit calculator, triggers, HITL | `engine/policy.py`, `engine/decision.py`, `engine/trigger.py`, `routes/hitl.py` |
-| L4 — Engagement | Personalised customer copy | Per-decision `explainer_text_customer` field; rendered in the dashboard |
-| L5 — Bank integration | Atomic CBS + network + notification | `routes/hitl.py::_execute_decision` updates the card row + benefits tier + audit log in one transaction; `/webhooks/hyperface/outbound/{decision_id}` returns the §9 instruction payload |
-| L6 — Compliance | Immutable audit log, reason codes, explainability | `AuditLog` model, `/analytics/audit-log`, SHAP-style feature contributions in `risk.py` |
-| L7 — Analytics | Funnel, ROI, A/B placeholder | `/analytics/funnel`, `/analytics/roi`, dashboard at `/` |
+| Orientation | Backward-looking (bureau, past repayment) | Forward-looking (live behaviour, intent) |
+| Primary matrix | Risk × Utilisation | **Risk × Intent** (utilisation demoted to a modifier) |
+| Output | One new-limit number | **direction + magnitude + duration + confidence** |
+| Increases | Auto-applied | **Offer pipeline** — paused until OTP/MPIN consent |
+| Decreases | Batch | **Action pipeline** — applied proactively with a buffer |
+| Self-harm guard | None | **Anti-spiral guardrail** (velocity caps, leverage ceiling) |
 
-The three pitch-ready differentiators from §4 of the brief are wired in:
+## Architecture — the decision pipeline (§7.1)
 
-1. **Continuous income re-estimation** — `income.py` triangulates CBS + AA + UPI + GST with confidence weighting.
-2. **Behavioral segmentation beyond bureau** — `behavioral.py` produces a 0-100 score and IMPROVING/STABLE/DETERIORATING direction from 30/60-day spend windows, merchant-tier mix and utilisation.
-3. **Personalised limit recommendation** — `decision._optimal_upgrade_limit` picks a per-customer target capped by income multiple and rounded to ₹5k, not a flat tier.
+```
+knockout → 5 signal layers → risk/tier → intent → Risk×Intent matrix
+        → capacity/buffer/inactivity formulas → anti-spiral guardrails
+        → confidence gating → offer / action pipeline split → write-back
+```
 
-The Hyperface differentiator (**benefits tier coupling**, §7) is implemented in `engine/decision.py` — every approved upgrade carries an atomic `benefits_tier_change` in both the persisted Decision row and the outbound webhook payload.
+| Stage | Concept § | Module |
+|---|---|---|
+| Hard-knockout layer (fraud / legal / 30+ DPD bypass) | §2.6 | `engine/knockout.py` |
+| Five signal layers (repayment trajectory, behavioural intent, stability, network, liquidity) | §2 | `engine/signals.py` |
+| PD prior + dynamic risk tiers (1–4) | §3.1, §4.1 | `engine/risk.py` |
+| **Intent disambiguation** (Growth / Distress / Seasonal / Neutral) | §3 | `engine/intent.py` |
+| Risk × Intent matrix + utilisation modifier | §4.2–4.3 | `engine/matrix.py` |
+| Capacity cap, decrease buffer, inactivity, **anti-spiral** guardrails | §5 | `engine/guardrails.py` |
+| MSME double-gate + trade-credit early warning | §9 | `engine/msme.py` |
+| Consent-asymmetric orchestration (offer vs action) | §6.1 | `engine/orchestration.py` |
+| End-to-end decision orchestrator | §7.1 | `engine/decision.py` |
+| Reason codes + officer/customer/consent copy | §6.2 | `engine/explainer.py` |
+| Tenant configuration (Bank / NBFC / SFB presets) | §8 | `engine/config.py` |
+
+The intent layer is an explicit **rules-over-features** design (the production
+alternative is a tree/GBM model) because the problem is non-monotonic and
+interaction-heavy: a velocity spike is *growth* only if inflow is stable **and**
+category quality is rising; the same spike with rising min-due dependency and an
+eroding buffer is *distress*. The conventional logistic PD model is retained as a
+**prior**, not the decision-maker.
+
+## The differentiators, wired in
+
+1. **Intent disambiguation** — `intent.py` separates a +120% velocity spike into
+   growth, distress, or seasonal from its *composition and context*, not the
+   number alone.
+2. **Risk × Intent matrix** — `matrix.py` fixes the cell the conventional model
+   gets wrong: **Tier 3 × Growth**, where a subprime customer showing genuine
+   upward mobility is held / cautiously, temporarily extended instead of auto-cut.
+3. **Consent asymmetry** — increases are an **offer pipeline** (paused until
+   OTP/MPIN); decreases are an **action pipeline** (applied with a 10% buffer +
+   notify). `orchestration.py`.
+4. **Anti-spiral guardrail** — `guardrails.py` caps the engine's own behaviour
+   (frequency gate, per-customer leverage ceiling, portfolio increase-velocity
+   cap, post-decrease cooldown) so a spend-maximising optimiser can't manufacture
+   defaults two quarters out.
+5. **Configurable SaaS** — `config.py` externalises every knob; switch Bank →
+   NBFC at runtime and the same Tier-1 growth offer widens from +50% to +60%.
+6. **MSME engine** — `msme.py` fuses promoter + business gates and weights
+   trade-credit DPD as a primary, forward distress trigger.
 
 ## Run it
 
-Two terminals. Backend (Python 3.11+ recommended; tested on 3.14):
+Two terminals. **Backend** (Python 3.11+; tested on 3.14):
 
 ```bash
 cd backend
 python3 -m venv .venv
 .venv/bin/pip install --only-binary=:all: -r requirements.txt
-.venv/bin/python -m app.seed          # seeds 15 customers + transactions
+.venv/bin/python -m app.seed             # seeds 15 archetypes across the matrix
 .venv/bin/uvicorn app.main:app --port 8000
 ```
 
-Frontend (Node 18+):
+**Frontend** (Node 18+):
 
 ```bash
 cd frontend
 npm install
-npm run dev                            # http://localhost:3000
+npm run dev                              # http://localhost:3000
 ```
 
-Open <http://localhost:3000>. Useful flow:
+### A useful walkthrough
 
-1. **Dashboard** — see the seeded funnel sit at 15 eligible / 0 reviewed.
-2. **Trigger simulator** — click *Run periodic sweep on all 15 customers*. Funnel populates, several decisions land in HITL.
-3. **HITL queue** — approve a couple of decisions; watch the dashboard executed count + ROI uplift update.
-4. **Customers → CIF-1001 (Aarav Mehta)** — see the income signals, transaction stream, decision history with reason codes, and fire a follow-up event from the same page.
-5. **Audit log** — every action above is in `/audit`.
+1. **Triggers → Run full sweep** — the micro-review sweep scores all 15 customers
+   and populates the book.
+2. **Dashboard** — intent distribution, risk-tier spread, the pipeline split
+   (offers awaiting consent vs decreases applied), and the anti-spiral gauge.
+3. **Risk × Intent matrix** — see each customer land in a cell; the Tier 3 ×
+   Growth showcase cell is highlighted.
+4. **Offers** — approve a consent-gated increase via OTP/MPIN; the limit applies
+   only on consent.
+5. **Actions** — risk decreases already applied with their operational buffer.
+6. **Customers → CIF-1009 (Meera)** — the Tier 3 × Growth case: five signal
+   layers, the four-part decision, and a cautious temporary offer.
+7. **Tenant config** — switch to NBFC, re-run the sweep, watch the same customers
+   decided under a hotter policy.
 
-## API contracts (mirror brainstorm §9)
+### Seeded archetypes (one sweep, the whole matrix)
+
+| Customer | Lands at | Demonstrates |
+|---|---|---|
+| Aarav, Diya, Ananya | Tier 1 × Growth | Aggressive consent-gated increase offers |
+| Rohan | Tier 2 × Seasonal | **Temporary** auto-reverting offer |
+| Kavya | Tier 2 × Neutral | Maintain |
+| **Meera** | **Tier 3 × Growth** | **The showcase cell — cautious temp offer, not auto-cut** |
+| Vikram, Sneha | Distress | Buffered decreases via the action pipeline |
+| Patel Traders | MSME × Distress | Trade-credit double-gate early warning |
+| Sharma Enterprises | MSME × Growth | Business-gate increase offer |
+| Ishaan, Priya | Tier 4 × Knockout | 30+ DPD / fraud bypass to freeze/decrease |
+| Rahul | Inactivity | Dormant limit right-sized (capital optimisation) |
+| Aditya | Guardrail | Increase held by the frequency gate |
+
+## Key API contracts
 
 ```http
-POST /webhooks/hyperface/event       # Hyperface → CLR (utilisation, spend spike, income step-change, enriched txn)
-GET  /webhooks/hyperface/outbound/{decision_id}   # The LIMIT_UPGRADE payload CLR would POST to Hyperface
-POST /triggers/fire                  # Manual trigger (dashboard simulator)
-POST /triggers/periodic-sweep        # The §3c monthly batch
-GET  /hitl/queue                     # PENDING decisions over the configurable threshold
-POST /hitl/{id}/approve              # Maker-checker approval → atomic write-back
-GET  /analytics/funnel               # L7 funnel metrics
-GET  /analytics/roi                  # L7 ROI + risk
+GET  /config                 GET /config/presets        POST /config/activate   # tenant SaaS layer
+POST /triggers/fire          POST /triggers/micro-review-sweep                   # §7.2 triggers
+POST /webhooks/aa/event      GET /webhooks/cbs/outbound/{id}                     # AA rail + CBS write-back
+GET  /offers                 POST /offers/{id}/consent   POST /offers/{id}/decline   # §6.1 offer pipeline
+GET  /actions                                                                    # §6.1 action pipeline
+GET  /review/queue           POST /review/{id}/approve   POST /review/{id}/reject    # confidence-gated HITL
+GET  /analytics/funnel       GET /analytics/roi          GET /analytics/guardrails   # §7.3 / §5.4
+GET  /decisions              GET /decisions/by-customer/{id}                      # four-part decisions
 ```
 
-## What's intentionally not built
+## What's intentionally a proxy
 
-Production-grade pieces deferred to keep the prototype runnable in one command:
+This is a demo of the **architecture and decision logic**, not a production system:
 
-- **Real ML models** — `behavioral.py` and `risk.py` use closed-form rule-based proxies. Swap in PySpark/XGBoost serving via FastAPI per the brief's tech-stack suggestion.
-- **Live LLM** — `explainer.py` uses deterministic templates. Wire to a Claude/GPT call with structured prompts when desired.
-- **Real bank adapters** — Finacle/T24/Flexcube/BaNCS connectors per §5 are stubbed by the Card row update in `hitl_executor.py`.
-- **Auth, RBAC, multi-tenancy, SOC 2 controls** — out of scope for a prototype.
-- **Drift monitoring, A/B framework, federated training** — `/analytics/roi` has a single-cohort view; cohort/control plumbing would extend `Decision` with a cohort_id field.
-
-This is a demo of the architecture and end-to-end flow, not a production system.
+- **Signal layers & PD** use closed-form rule-based proxies in place of a feature
+  store + PySpark/GBM serving. Swap behind the same `SignalBundle` / `RiskOutput`
+  interfaces.
+- **Explainer** uses deterministic templates; wire to an LLM with structured
+  prompts for the customer-facing copy.
+- **AA / CBS** are simulated by the webhook endpoints and a card-row write-back;
+  real FIU/FIP and core-banking adapters slot in behind `orchestration.py`.
+- **Champion-challenger** (§5.4) is represented by the portfolio velocity cap and
+  guardrail telemetry, not a live cohort experiment loop.
+- **Auth, RBAC, multi-tenant isolation, SOC 2** are out of scope for a prototype
+  (the deployment model is single-tenant-per-install per §8.1).

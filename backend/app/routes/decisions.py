@@ -11,12 +11,18 @@ router = APIRouter(prefix="/decisions", tags=["decisions"])
 @router.get("", response_model=list[DecisionOut])
 def list_decisions(
     db: Session = Depends(get_db),
-    decision: str | None = Query(default=None),
+    intent: str | None = Query(default=None),
+    direction: str | None = Query(default=None),
+    pipeline: str | None = Query(default=None),
     limit: int = 100,
 ):
     q = db.query(Decision).order_by(Decision.created_at.desc())
-    if decision:
-        q = q.filter(Decision.decision == decision.upper())
+    if intent:
+        q = q.filter(Decision.intent == intent.upper())
+    if direction:
+        q = q.filter(Decision.direction == direction.upper())
+    if pipeline:
+        q = q.filter(Decision.pipeline == pipeline.upper())
     return q.limit(limit).all()
 
 

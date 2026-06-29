@@ -8,9 +8,9 @@ export default async function TriggersPage() {
     <>
       <div className="page-head">
         <div>
-          <h2 className="page-title">Trigger simulator</h2>
+          <h2 className="page-title">Trigger engine</h2>
           <p className="page-sub" style={{ marginBottom: 0 }}>
-            Fire a Hyperface event into CLR, or run a periodic sweep across the entire customer book.
+            Fire an event into CLR, or run a continuous micro-review across the whole book (§7.2).
           </p>
         </div>
       </div>
@@ -18,8 +18,9 @@ export default async function TriggersPage() {
       <div className="banner" style={{ marginBottom: 24 }}>
         <Icon name="info" size={18} />
         <div>
-          <span className="banner-title">Three trigger modes per the spec.</span>{" "}
-          Event-driven fires on a specific transaction event (utilisation, spike). Periodic sweeps run the whole book. Income step-change fires when the L2b estimator detects a real cashflow shift.
+          <span className="banner-title">Event-driven, not end-of-day batch.</span>{" "}
+          Salary credits, declined high-value transactions, utilisation thresholds and AA pushes each trigger a
+          decision. The micro-review sweep replaces the quarterly batch with continuous re-scoring.
         </div>
       </div>
 

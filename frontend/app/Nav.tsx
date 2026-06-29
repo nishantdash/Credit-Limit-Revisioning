@@ -3,28 +3,31 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Icon } from "../components/Icon";
+import { API_BASE } from "../lib/api";
 
-const ITEMS: { href: string; label: string; icon: Parameters<typeof Icon>[0]["name"]; badgeKey?: "hitl" }[] = [
+const ITEMS: { href: string; label: string; icon: Parameters<typeof Icon>[0]["name"]; badgeKey?: "review" }[] = [
   { href: "/", label: "Dashboard", icon: "home" },
   { href: "/customers", label: "Customers", icon: "users" },
-  { href: "/ingest", label: "Upload dump", icon: "upload" },
-  { href: "/hitl", label: "HITL queue", icon: "checklist", badgeKey: "hitl" },
+  { href: "/matrix", label: "Risk × Intent matrix", icon: "layers" },
+  { href: "/offers", label: "Offers (consent)", icon: "card" },
+  { href: "/actions", label: "Actions (decreases)", icon: "trend-down" },
+  { href: "/review", label: "Review queue", icon: "checklist", badgeKey: "review" },
   { href: "/triggers", label: "Triggers", icon: "bolt" },
+  { href: "/ingest", label: "Upload dump", icon: "upload" },
+  { href: "/config", label: "Tenant config", icon: "shield" },
   { href: "/audit", label: "Audit log", icon: "audit" },
 ];
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://127.0.0.1:8000";
-
 export function Nav() {
   const path = usePathname();
-  const [hitlCount, setHitlCount] = useState<number | null>(null);
+  const [reviewCount, setReviewCount] = useState<number | null>(null);
 
   useEffect(() => {
     let alive = true;
     const load = () => {
       fetch(`${API_BASE}/analytics/funnel`, { cache: "no-store" })
-        .then((r) => r.ok ? r.json() : null)
-        .then((d) => { if (alive && d) setHitlCount(d.hitl_pending); })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => { if (alive && d) setReviewCount(d.review_pending); })
         .catch(() => {});
     };
     load();
@@ -38,7 +41,7 @@ export function Nav() {
       <nav>
         {ITEMS.map((item) => {
           const active = path === item.href || (item.href !== "/" && path.startsWith(item.href));
-          const badge = item.badgeKey === "hitl" && hitlCount && hitlCount > 0 ? hitlCount : null;
+          const badge = item.badgeKey === "review" && reviewCount && reviewCount > 0 ? reviewCount : null;
           return (
             <Link key={item.href} href={item.href} className={`nav-item ${active ? "active" : ""}`} aria-label={item.label}>
               <Icon name={item.icon} size={20} />

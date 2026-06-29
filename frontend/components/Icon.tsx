@@ -6,9 +6,9 @@ type IconName =
   | "check" | "x" | "more" | "edit" | "play" | "alert-circle"
   | "spark" | "user" | "calendar" | "external";
 
-type Props = { name: IconName; size?: number; stroke?: number; className?: string };
+type Props = { name: IconName; size?: number; stroke?: number; className?: string; style?: React.CSSProperties };
 
-export function Icon({ name, size = 18, stroke = 1.75, className }: Props) {
+export function Icon({ name, size = 18, stroke = 1.75, className, style }: Props) {
   const common = {
     width: size,
     height: size,
@@ -19,6 +19,7 @@ export function Icon({ name, size = 18, stroke = 1.75, className }: Props) {
     strokeLinecap: "round" as const,
     strokeLinejoin: "round" as const,
     className,
+    style,
   };
   switch (name) {
     case "home":

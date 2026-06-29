@@ -4,11 +4,18 @@ import { MetricCard } from "../../components/MetricCard";
 import { Pill } from "../../components/Pill";
 
 const ACTION_VARIANT: Record<string, "green" | "amber" | "red" | "blue" | "purple" | "gray"> = {
-  HITL_APPROVED: "green",
-  HITL_REJECTED: "red",
-  LIMIT_UPDATED: "green",
-  LIMIT_UPDATED_AUTO: "green",
   CREATED: "blue",
+  CONSENT_ACCEPTED: "green",
+  CONSENT_DECLINED: "red",
+  OFFER_DISPATCHED: "blue",
+  OFFER_DISPATCHED_ON_REVIEW: "blue",
+  LIMIT_INCREASED_ON_CONSENT: "green",
+  LIMIT_DECREASED_AUTO: "amber",
+  LIMIT_DECREASED_ON_REVIEW: "amber",
+  REVIEW_APPROVED: "green",
+  REVIEW_REJECTED: "red",
+  ACTIVATED: "purple",
+  PATCHED: "purple",
   CSV_UPLOAD: "purple",
   COHORT_SWEEP_RUN: "purple",
 };
@@ -31,9 +38,9 @@ export default async function AuditPage() {
 
       <div className="grid cols-4">
         <MetricCard label="Total events" value={rows.length.toString()} sub="Within retention window" iconName="audit" />
-        <MetricCard label="Decisions" value={(byType.Decision || 0).toString()} sub="Created + updated" iconName="checklist" />
-        <MetricCard label="Card write-backs" value={(byType.Card || 0).toString()} sub="L5 atomic updates" iconName="card" />
-        <MetricCard label="Ingestion events" value={(byType.Ingest || 0).toString()} sub="CSV cohort uploads" iconName="upload" />
+        <MetricCard label="Decisions" value={(byType.Decision || 0).toString()} sub="Reason-coded (DPDP §6.2)" iconName="checklist" />
+        <MetricCard label="Limit write-backs" value={(byType.Card || 0).toString()} sub="Applied to core banking" iconName="card" />
+        <MetricCard label="Consent events" value={(byType.Offer || 0).toString()} sub="OTP/MPIN offer trail" iconName="shield" />
       </div>
 
       <div style={{ height: 24 }} />

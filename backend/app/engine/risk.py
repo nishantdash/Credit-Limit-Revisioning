@@ -1,63 +1,83 @@
-"""L2c — Risk scorer.
+"""Risk model — PD prior + dynamic risk tiers (§3.1, §4.1).
 
-Produces Probability of Default (PD) from bureau + behavioral + income signals.
-Prototype uses a logistic-style closed form in place of XGBoost; the SHAP-style
-reason-code list is computed by ranking contribution of each feature.
+The conventional logistic PD model is retained but demoted to a *prior*, not the
+decision-maker. PD maps to one of four dynamic tiers, evaluated continuously.
+The hard-knockout layer can place an account in Tier 4 directly (handled in the
+orchestrator), bypassing this scorer.
 """
-from dataclasses import dataclass
+from __future__ import annotations
+
 import math
+from dataclasses import dataclass, field
+
+from . import config as cfg_mod
+from .signals import SignalBundle
 
 
 @dataclass
 class RiskOutput:
-    pd_pre: float           # probability of default at current limit
+    pd_pre: float
     pd_post_projected: float
-    feature_contributions: dict[str, float]
+    tier: int
+    feature_contributions: dict[str, float] = field(default_factory=dict)
 
 
 def _logistic(z: float) -> float:
     return 1.0 / (1.0 + math.exp(-z))
 
 
+def _pd(bureau: int, sig: SignalBundle, current_limit: float, projected_limit: float,
+        income: float) -> tuple[float, float, dict[str, float]]:
+    # Each feature contributes to log-odds; larger positive = riskier.
+    f_bureau = (750 - bureau) / 80.0
+    f_pqr = (0.6 - sig.pqr_level) * 1.4
+    f_min_due = (sig.min_due_dependency - 0.4) * 1.3
+    f_dpd = (sig.dpd_max_12m / 30.0) * 1.2
+    f_util = max(0.0, (sig.utilization - 0.6) / 0.4) * 0.6
+    f_buffer = min(0.9, max(0.0, (0.15 - sig.buffer_ratio)) * 1.6)
+    f_income_pre = max(0.0, current_limit / max(1.0, income) - 3.0) * 0.5
+    f_income_post = max(0.0, projected_limit / max(1.0, income) - 3.0) * 0.5
+
+    base = -4.0
+    z_pre = base + f_bureau + f_pqr + f_min_due + f_dpd + f_util + f_buffer + f_income_pre
+    z_post = base + f_bureau + f_pqr + f_min_due + f_dpd + f_util + f_buffer + f_income_post
+    contribs = {
+        "bureau": round(f_bureau, 3),
+        "pqr": round(f_pqr, 3),
+        "min_due_dependency": round(f_min_due, 3),
+        "dpd": round(f_dpd, 3),
+        "utilization": round(f_util, 3),
+        "buffer": round(f_buffer, 3),
+        "income_vs_limit": round(f_income_post, 3),
+    }
+    return _logistic(z_pre), _logistic(z_post), contribs
+
+
+def assign_tier(pd: float, config: cfg_mod.TenantConfig) -> int:
+    bands = config.tier_pd_bands
+    if pd < bands["tier1"]:
+        return 1
+    if pd < bands["tier2"]:
+        return 2
+    if pd < bands["tier3"]:
+        return 3
+    return 4
+
+
 def score(
+    *,
     bureau_score: int,
-    behavioral_score: float,
-    income_estimate: float,
+    sig: SignalBundle,
     current_limit: float,
     projected_limit: float,
-    dpd_max_12m: int,
-    utilization_pct: float,
+    config: cfg_mod.TenantConfig,
 ) -> RiskOutput:
-    # Map each input to a contribution; bigger positive = more risky.
-    # Bureau 300..900 → centred at 750
-    f_bureau = (750 - bureau_score) / 80.0
-    # Behavioral 0..100 → centred at 65
-    f_behavior = (65 - behavioral_score) / 25.0
-    # Income vs limit ratio — limit > 3x income is risky
-    income_ratio_pre = current_limit / max(1.0, income_estimate)
-    income_ratio_post = projected_limit / max(1.0, income_estimate)
-    f_income_pre = max(0.0, income_ratio_pre - 2.0) * 0.6
-    f_income_post = max(0.0, income_ratio_post - 2.0) * 0.6
-    # DPD
-    f_dpd = (dpd_max_12m / 30.0) * 1.2
-    # Utilisation
-    f_util = max(0.0, (utilization_pct - 60) / 40.0) * 0.5
-
-    z_pre = -3.0 + f_bureau + f_behavior + f_income_pre + f_dpd + f_util
-    z_post = -3.0 + f_bureau + f_behavior + f_income_post + f_dpd + f_util
-
-    pd_pre = _logistic(z_pre)
-    pd_post = _logistic(z_post)
-
-    contribs = {
-        "bureau_score": round(f_bureau, 3),
-        "behavioral_score": round(f_behavior, 3),
-        "income_vs_limit": round(f_income_post, 3),
-        "dpd_max_12m": round(f_dpd, 3),
-        "utilization": round(f_util, 3),
-    }
+    pd_pre, pd_post, contribs = _pd(
+        bureau_score, sig, current_limit, projected_limit, sig.income_estimate
+    )
     return RiskOutput(
         pd_pre=round(pd_pre, 4),
         pd_post_projected=round(pd_post, 4),
+        tier=assign_tier(pd_pre, config),
         feature_contributions=contribs,
     )

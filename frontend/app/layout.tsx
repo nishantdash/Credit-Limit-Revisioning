@@ -4,8 +4,8 @@ import { Nav } from "./Nav";
 import { TopBar } from "./TopBar";
 
 export const metadata: Metadata = {
-  title: "CLR — Credit Limit Revisioning",
-  description: "Continuous, event-driven, AI-personalised credit-limit management",
+  title: "CLR — Intent-Driven Credit Limit Revisioning",
+  description: "Real-time, intent-driven credit-limit revisioning on India's AA + DPDP + RBI rails",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

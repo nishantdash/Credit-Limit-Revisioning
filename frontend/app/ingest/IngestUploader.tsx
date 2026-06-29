@@ -6,7 +6,9 @@ import {
   api,
   CohortSweepResponse,
   Decision,
+  DIRECTION_VARIANT,
   IngestSummary,
+  INTENT_VARIANT,
   inr,
   uploadFile,
 } from "../../lib/api";
@@ -188,50 +190,43 @@ export function IngestUploader() {
 }
 
 function SweepResults({ sweep }: { sweep: CohortSweepResponse }) {
-  const by = { UPGRADE: 0, DOWNGRADE: 0, FREEZE: 0 } as Record<string, number>;
-  const hitlCount = sweep.decisions.filter((d) => d.hitl_required).length;
-  const executedCount = sweep.decisions.filter((d) => d.executed).length;
-  const uplift = sweep.decisions.filter((d) => d.decision === "UPGRADE").reduce((s, d) => s + (d.recommended_limit - d.current_limit), 0);
-  sweep.decisions.forEach((d) => { by[d.decision] = (by[d.decision] || 0) + 1; });
+  const increases = sweep.decisions.filter((d) => d.direction === "INCREASE").length;
+  const decreases = sweep.decisions.filter((d) => d.direction === "DECREASE").length;
+  const holds = sweep.decisions.filter((d) => d.direction === "MAINTAIN" || d.direction === "FREEZE").length;
+  const offers = sweep.decisions.filter((d) => d.pipeline === "OFFER").length;
   return (
     <div className="card padless">
       <div className="card-head">
         <h3>Cohort sweep results</h3>
-        <span className="muted" style={{ fontSize: 12 }}>{hitlCount} routed to HITL · {executedCount} auto-executed</span>
+        <span className="muted" style={{ fontSize: 12 }}>{offers} offers · {decreases} decreases applied</span>
       </div>
       <div style={{ padding: 16 }}>
         <div className="grid cols-4" style={{ marginBottom: 16 }}>
-          <Stat label="Upgrades" value={(by.UPGRADE || 0).toString()} color="green" />
-          <Stat label="Downgrades" value={(by.DOWNGRADE || 0).toString()} color="red" />
-          <Stat label="Freezes" value={(by.FREEZE || 0).toString()} color="amber" />
-          <Stat label="Recommended uplift" value={inr(uplift)} />
+          <Stat label="Increase offers" value={increases.toString()} color="green" />
+          <Stat label="Decreases" value={decreases.toString()} color="red" />
+          <Stat label="Hold / freeze" value={holds.toString()} color="amber" />
+          <Stat label="Swept" value={sweep.swept.toString()} />
         </div>
       </div>
       <div className="table-wrap">
         <table>
-          <thead><tr><th>Decision</th><th>Customer</th><th>Limit change</th><th>PD pre → post</th><th>Reason codes</th><th>Status</th></tr></thead>
+          <thead><tr><th>Intent</th><th>Customer</th><th>Cell</th><th>Decision</th><th>Pipeline</th></tr></thead>
           <tbody>
             {sweep.decisions.map((d: Decision) => (
               <tr key={d.id}>
-                <td><Pill variant={d.decision}>{d.decision}</Pill></td>
+                <td><Pill variant={INTENT_VARIANT[d.intent]} bare>{d.intent}</Pill></td>
                 <td>
                   <div className="row" style={{ gap: 10 }}>
                     <Avatar id={d.customer_id} size="sm" />
                     <Link href={`/customers/${d.customer_id}`} style={{ color: "var(--text)" }}>{d.customer_id}</Link>
                   </div>
                 </td>
+                <td className="muted" style={{ fontSize: 12 }}>{d.matrix_cell}</td>
                 <td>
-                  {d.decision === "FREEZE"
-                    ? <span className="muted">{inr(d.current_limit)}</span>
-                    : <>{inr(d.current_limit)} <Icon name="arrow-right" size={12} /> <strong>{inr(d.recommended_limit)}</strong></>}
+                  <Pill variant={DIRECTION_VARIANT[d.direction]}>{d.direction}</Pill>{" "}
+                  {d.direction !== "MAINTAIN" && d.direction !== "FREEZE" && <span className="muted" style={{ fontSize: 12 }}>{inr(d.current_limit)} <Icon name="arrow-right" size={11} /> {inr(d.recommended_limit)}</span>}
                 </td>
-                <td className="muted">{(d.pd_pre * 100).toFixed(2)}% → {(d.pd_post_projected * 100).toFixed(2)}%</td>
-                <td><div className="reasons">{d.reason_codes.slice(0, 3).map((r) => <span key={r} className="chip">{r}</span>)}</div></td>
-                <td>
-                  {d.hitl_required ? <Pill variant={d.hitl_status as "PENDING"}>HITL · {d.hitl_status}</Pill>
-                    : d.executed ? <Pill variant="EXECUTED">EXECUTED</Pill>
-                    : <span className="muted">—</span>}
-                </td>
+                <td>{d.pipeline === "NONE" ? <span className="muted">—</span> : <Pill variant={d.pipeline} bare>{d.pipeline}</Pill>}</td>
               </tr>
             ))}
           </tbody>

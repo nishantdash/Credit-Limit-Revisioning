@@ -1,189 +1,168 @@
 import Link from "next/link";
-import { api, Decision, Funnel, inr, pct, Roi } from "../lib/api";
+import {
+  api, Decision, Funnel, Guardrails, inr, inrCompact, Roi,
+  DIRECTION_VARIANT, INTENT_VARIANT, TIER_LABEL,
+} from "../lib/api";
 import { MetricCard } from "../components/MetricCard";
 import { Pill } from "../components/Pill";
 import { Avatar } from "../components/Avatar";
 import { Icon } from "../components/Icon";
+import { DistBar, colorFor } from "../components/DistBar";
+
+const INTENT_ORDER = ["GROWTH", "DISTRESS", "SEASONAL", "NEUTRAL", "KNOCKOUT"];
+const TIER_ORDER = ["tier1", "tier2", "tier3", "tier4"];
 
 export default async function Dashboard() {
-  const [funnel, roi, decisions, pending] = await Promise.all([
+  const [funnel, roi, guard, decisions] = await Promise.all([
     api<Funnel>("/analytics/funnel"),
     api<Roi>("/analytics/roi"),
-    api<Decision[]>("/decisions?limit=8"),
-    api<Decision[]>("/hitl/queue"),
+    api<Guardrails>("/analytics/guardrails"),
+    api<Decision[]>("/decisions?limit=10"),
   ]);
 
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
-  const reviewedPct = funnel.eligible ? (funnel.reviewed / funnel.eligible) * 100 : 0;
+  const intentSegs = INTENT_ORDER.filter((k) => funnel.by_intent[k]).map((k) => ({ label: k, value: funnel.by_intent[k], color: colorFor(k) }));
+  const tierSegs = TIER_ORDER.filter((k) => funnel.by_tier[k]).map((k) => ({ label: `T${k.slice(-1)}`, value: funnel.by_tier[k], color: colorFor(k) }));
+
+  const gaugeUsed = guard.portfolio_increase_cap_pct ? (guard.portfolio_increase_used_pct / guard.portfolio_increase_cap_pct) * 100 : 0;
 
   return (
     <>
       <div className="page-head">
         <div>
           <h2 className="page-title">{greeting}, Nishant</h2>
-          <p className="page-sub" style={{ marginBottom: 0 }}>Here's what's happening across the YES Bank programme today.</p>
+          <p className="page-sub" style={{ marginBottom: 0 }}>
+            Real-time credit-limit revisioning across the book — intent, not just risk.
+          </p>
         </div>
         <div className="actions">
-          <button className="btn"><Icon name="download" size={14} /> Export</button>
-          <Link href="/triggers" className="btn btn-primary"><Icon name="plus" size={14} /> Run sweep</Link>
+          <Link href="/matrix" className="btn"><Icon name="layers" size={14} /> Matrix</Link>
+          <Link href="/triggers" className="btn btn-primary"><Icon name="bolt" size={14} /> Run micro-review</Link>
         </div>
       </div>
 
       <div className="grid cols-4">
-        <MetricCard
-          label="Customers eligible"
-          value={funnel.eligible.toString()}
-          sub={`${funnel.reviewed} reviewed this cycle`}
-          delta={funnel.reviewed > 0 ? { value: `${reviewedPct.toFixed(0)}% coverage`, direction: "up" } : undefined}
-          iconName="users"
-        />
-        <MetricCard
-          label="Recommended uplift"
-          value={inr(roi.total_limit_uplift_inr)}
-          sub={`${roi.upgrades_count} upgrades executed`}
-          iconName="trend-up"
-        />
-        <MetricCard
-          label="HITL pending"
-          value={funnel.hitl_pending.toString()}
-          sub="Awaiting maker-checker"
-          iconName="checklist"
-        />
-        <MetricCard
-          label="Avg PD shift"
-          value={`${(roi.avg_pd_pre * 100).toFixed(2)}% → ${(roi.avg_pd_post * 100).toFixed(2)}%`}
-          sub={roi.avg_pd_post <= roi.avg_pd_pre ? "PD held flat or improved" : "PD increased"}
-          delta={roi.avg_pd_post <= roi.avg_pd_pre
-            ? { value: "within threshold", direction: "up" }
-            : { value: "watch", direction: "down" }}
-          iconName="shield"
-        />
+        <MetricCard label="Customers in book" value={funnel.customers.toString()} sub={`${funnel.reviewed} decisions this cycle`} iconName="users" />
+        <MetricCard label="Offered uplift (consent-gated)" value={inrCompact(roi.offered_uplift_inr)} sub={`${inrCompact(roi.activated_uplift_inr)} activated`} iconName="trend-up" delta={{ value: `${funnel.offers_pending_consent} awaiting OTP`, direction: "up" }} />
+        <MetricCard label="Exposure reduced" value={inrCompact(roi.exposure_reduced_inr)} sub={`${funnel.actions_applied} decreases applied`} iconName="shield" />
+        <MetricCard label="Avg PD shift" value={`${(roi.avg_pd_pre * 100).toFixed(2)}% → ${(roi.avg_pd_post * 100).toFixed(2)}%`} sub={roi.avg_pd_post <= roi.avg_pd_pre ? "held flat or improved" : "watch"} iconName="checklist" delta={{ value: roi.avg_pd_post <= roi.avg_pd_pre ? "within threshold" : "watch", direction: roi.avg_pd_post <= roi.avg_pd_pre ? "up" : "down" }} />
       </div>
 
       <div style={{ height: 24 }} />
 
       <div className="grid split-2-1">
-        <div className="card padless">
-          <div className="card-head">
-            <div className="row" style={{ gap: 8 }}>
-              <h3>Needs attention</h3>
-              <Pill variant="red" bare>{pending.length} open</Pill>
+        <div className="grid" style={{ gap: 24 }}>
+          <div className="card">
+            <div className="row-between" style={{ marginBottom: 16 }}>
+              <h3>Intent disambiguation</h3>
+              <span className="muted" style={{ fontSize: 12 }}>growth vs distress vs seasonal</span>
             </div>
-            <Link href="/hitl" className="btn btn-sm">Open queue</Link>
+            <DistBar segments={intentSegs} />
+            <div style={{ height: 18 }} />
+            <div className="row-between" style={{ marginBottom: 12 }}>
+              <h3 style={{ fontSize: 14 }}>Risk tiers</h3>
+              <span className="muted" style={{ fontSize: 12 }}>continuous, not period-end</span>
+            </div>
+            <DistBar segments={tierSegs} />
           </div>
-          <div className="card-body">
-            {pending.length === 0 ? (
-              <div className="empty">All HITL items cleared. The maker-checker queue is empty.</div>
-            ) : (
-              pending.slice(0, 5).map((d) => (
-                <div key={d.id} className="na-row">
-                  <div className="na-icon"><Icon name="alert-circle" size={18} /></div>
-                  <div className="na-text">
-                    <div className="na-title">
-                      {d.customer_id} — {d.decision} {inr(d.current_limit)} → {inr(d.recommended_limit)}
-                    </div>
-                    <div className="na-meta">
-                      Trigger: {d.trigger_type} · PD {pct(d.pd_pre)} → {pct(d.pd_post_projected)} · {d.reason_codes.slice(0, 2).join(", ")}
-                    </div>
-                  </div>
-                  <Pill variant="purple" bare>HITL · {d.hitl_status}</Pill>
-                  <Link href={`/customers/${d.customer_id}`} className="btn btn-sm">Review <Icon name="arrow-right" size={12} /></Link>
-                </div>
-              ))
+
+          <div className="card padless">
+            <div className="card-head">
+              <h3>Recent decisions</h3>
+              <Link href="/customers" className="btn btn-sm">All customers <Icon name="arrow-right" size={12} /></Link>
+            </div>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>Cell</th><th>Customer</th><th>Intent</th><th>Decision</th><th>Limit</th><th>Pipeline</th><th>Conf</th></tr>
+                </thead>
+                <tbody>
+                  {decisions.map((d) => (
+                    <tr key={d.id}>
+                      <td className="muted" style={{ fontSize: 12 }} title={TIER_LABEL[d.risk_tier]}>{d.matrix_cell}</td>
+                      <td>
+                        <Link href={`/customers/${d.customer_id}`} className="row" style={{ color: "var(--text)" }}>
+                          <Avatar id={d.customer_id} size="sm" /><span style={{ marginLeft: 8 }}>{d.customer_id}</span>
+                        </Link>
+                      </td>
+                      <td><Pill variant={INTENT_VARIANT[d.intent]} bare>{d.intent}</Pill></td>
+                      <td>
+                        <Pill variant={DIRECTION_VARIANT[d.direction]}>{d.direction}</Pill>
+                        {d.duration === "TEMPORARY" && <span style={{ marginLeft: 6 }}><Pill variant="TEMPORARY" bare>temp</Pill></span>}
+                      </td>
+                      <td className="muted" style={{ fontSize: 13 }}>
+                        {d.direction === "MAINTAIN" || d.direction === "FREEZE"
+                          ? inr(d.current_limit)
+                          : <>{inr(d.current_limit)} <Icon name="arrow-right" size={11} /> <strong style={{ color: "var(--text)" }}>{inr(d.recommended_limit)}</strong></>}
+                      </td>
+                      <td>{d.pipeline === "NONE" ? <span className="muted">—</span> : <Pill variant={d.pipeline} bare>{d.pipeline}</Pill>}</td>
+                      <td className="muted">{(d.confidence * 100).toFixed(0)}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid" style={{ gap: 24, alignContent: "start" }}>
+          <div className="card">
+            <h3 style={{ marginBottom: 14 }}>Orchestration pipelines</h3>
+            <p className="muted" style={{ fontSize: 12, marginTop: 0, marginBottom: 14 }}>
+              The RBI consent asymmetry: increases are offers, decreases are actions.
+            </p>
+            <div className="grid" style={{ gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div className="pipe-card">
+                <span className="pipe-k" style={{ color: "var(--primary)" }}>{funnel.offers_pending_consent}</span>
+                <span className="pipe-l">Offers awaiting OTP/MPIN</span>
+              </div>
+              <div className="pipe-card">
+                <span className="pipe-k" style={{ color: "var(--green)" }}>{funnel.offers_accepted}</span>
+                <span className="pipe-l">Offers accepted</span>
+              </div>
+              <div className="pipe-card">
+                <span className="pipe-k" style={{ color: "var(--red)" }}>{funnel.actions_applied}</span>
+                <span className="pipe-l">Decreases applied</span>
+              </div>
+              <div className="pipe-card">
+                <span className="pipe-k" style={{ color: "var(--amber)" }}>{funnel.review_pending}</span>
+                <span className="pipe-l">Held for review</span>
+              </div>
+            </div>
+            <div className="row" style={{ gap: 8, marginTop: 14 }}>
+              <Link href="/offers" className="btn btn-sm" style={{ flex: 1, justifyContent: "center" }}>Offers</Link>
+              <Link href="/actions" className="btn btn-sm" style={{ flex: 1, justifyContent: "center" }}>Actions</Link>
+              <Link href="/review" className="btn btn-sm" style={{ flex: 1, justifyContent: "center" }}>Review</Link>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="row-between" style={{ marginBottom: 6 }}>
+              <h3>Anti-spiral guardrail</h3>
+              <Pill variant={gaugeUsed > 80 ? "red" : gaugeUsed > 50 ? "amber" : "green"} bare>
+                {guard.portfolio_headroom_pct.toFixed(1)}% headroom
+              </Pill>
+            </div>
+            <p className="muted" style={{ fontSize: 12, marginTop: 0, marginBottom: 14 }}>
+              Portfolio increase-velocity cap — ceiling on aggregate book uplift, independent of individual eligibility.
+            </p>
+            <div className="gauge-track">
+              <div className="gauge-fill" style={{ width: `${Math.min(gaugeUsed, 100)}%` }} />
+            </div>
+            <div className="row-between" style={{ marginTop: 8, fontSize: 12 }}>
+              <span className="muted">{inrCompact(guard.increase_extended_30d_inr)} extended (30d)</span>
+              <span className="muted">cap {guard.portfolio_increase_cap_pct}% of {inrCompact(guard.total_book_limit_inr)}</span>
+            </div>
+            {Object.keys(guard.cap_breakdown).length > 0 && (
+              <div className="reasons" style={{ marginTop: 12 }}>
+                {Object.entries(guard.cap_breakdown).map(([k, v]) => (
+                  <span key={k} className="chip">{k} · {v}</span>
+                ))}
+              </div>
             )}
           </div>
-        </div>
-
-        <div className="card">
-          <h3 style={{ marginBottom: 12 }}>Quick actions</h3>
-          <Link href="/triggers" className="qa-item" style={{ textDecoration: "none", color: "inherit" }}>
-            <div className="qa-icon"><Icon name="bolt" size={18} /></div>
-            <div>
-              <div className="qa-title">Run periodic sweep</div>
-              <div className="qa-sub">Monthly batch across the book</div>
-            </div>
-            <Icon name="arrow-right" size={16} className="qa-arrow" />
-          </Link>
-          <Link href="/ingest" className="qa-item" style={{ textDecoration: "none", color: "inherit" }}>
-            <div className="qa-icon"><Icon name="upload" size={18} /></div>
-            <div>
-              <div className="qa-title">Upload transaction dump</div>
-              <div className="qa-sub">CSV → cohort sweep</div>
-            </div>
-            <Icon name="arrow-right" size={16} className="qa-arrow" />
-          </Link>
-          <Link href="/hitl" className="qa-item" style={{ textDecoration: "none", color: "inherit" }}>
-            <div className="qa-icon"><Icon name="checklist" size={18} /></div>
-            <div>
-              <div className="qa-title">Review pending HITL</div>
-              <div className="qa-sub">{funnel.hitl_pending} awaiting approval</div>
-            </div>
-            <Icon name="arrow-right" size={16} className="qa-arrow" />
-          </Link>
-          <Link href="/audit" className="qa-item" style={{ textDecoration: "none", color: "inherit" }}>
-            <div className="qa-icon"><Icon name="audit" size={18} /></div>
-            <div>
-              <div className="qa-title">Audit log</div>
-              <div className="qa-sub">Immutable RBI / DPDP trail</div>
-            </div>
-            <Icon name="arrow-right" size={16} className="qa-arrow" />
-          </Link>
-        </div>
-      </div>
-
-      <div style={{ height: 24 }} />
-
-      <div className="card padless">
-        <div className="card-head">
-          <h3>Recent decisions</h3>
-          <Link href="/customers" className="btn btn-sm">All customers <Icon name="arrow-right" size={12} /></Link>
-        </div>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Decision</th>
-                <th>Customer</th>
-                <th>Trigger</th>
-                <th>Limit change</th>
-                <th>PD pre → post</th>
-                <th>Status</th>
-                <th>When</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {decisions.map((d) => (
-                <tr key={d.id}>
-                  <td><Pill variant={d.decision}>{d.decision}</Pill></td>
-                  <td>
-                    <Link href={`/customers/${d.customer_id}`} style={{ color: "var(--text)" }} className="row" >
-                      <Avatar id={d.customer_id} size="sm" />
-                      <span style={{ marginLeft: 8 }}>{d.customer_id}</span>
-                    </Link>
-                  </td>
-                  <td className="muted">{d.trigger_type}</td>
-                  <td>
-                    {d.decision === "FREEZE"
-                      ? <span className="muted">{inr(d.current_limit)}</span>
-                      : <>{inr(d.current_limit)} <Icon name="arrow-right" size={12} /> <strong>{inr(d.recommended_limit)}</strong></>}
-                  </td>
-                  <td className="muted">{pct(d.pd_pre)} → {pct(d.pd_post_projected)}</td>
-                  <td>
-                    {d.hitl_required
-                      ? <Pill variant={d.hitl_status as "PENDING" | "APPROVED" | "REJECTED"}>{d.hitl_status}</Pill>
-                      : d.executed
-                        ? <Pill variant="EXECUTED">EXECUTED</Pill>
-                        : <Pill variant="gray" bare>auto</Pill>}
-                  </td>
-                  <td className="muted">{new Date(d.created_at).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</td>
-                  <td><Icon name="chevron-right" size={14} className="muted" /></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
         </div>
       </div>
     </>

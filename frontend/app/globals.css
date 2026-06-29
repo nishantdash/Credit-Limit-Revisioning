@@ -715,3 +715,79 @@ input:focus, select:focus, textarea:focus {
 .na-row .na-text { flex: 1; min-width: 0; }
 .na-row .na-title { font-size: 13px; font-weight: 600; color: var(--text); }
 .na-row .na-meta { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+
+/* ─── CLR intent-engine extensions ──────────────────────────────── */
+
+/* Domain pill variants (intents / directions / pipelines / consent) */
+.pill-GROWTH    { background: var(--green-tint);  color: var(--green); }
+.pill-DISTRESS  { background: var(--red-tint);    color: var(--red); }
+.pill-SEASONAL  { background: var(--orange-tint); color: var(--orange); }
+.pill-NEUTRAL   { background: var(--surface-2);   color: var(--text-dim); }
+.pill-KNOCKOUT  { background: var(--purple-tint); color: var(--purple); }
+.pill-INCREASE  { background: var(--green-tint);  color: var(--green); }
+.pill-DECREASE  { background: var(--red-tint);    color: var(--red); }
+.pill-MAINTAIN  { background: var(--surface-2);   color: var(--text-dim); }
+.pill-OFFER     { background: var(--primary-tint); color: var(--primary); }
+.pill-ACTION    { background: var(--red-tint);    color: var(--red); }
+.pill-NONE      { background: var(--surface-2);   color: var(--text-dim); }
+.pill-PERMANENT { background: var(--surface-2);   color: var(--text-dim); }
+.pill-TEMPORARY { background: var(--orange-tint); color: var(--orange); }
+.pill-PENDING_CONSENT { background: var(--amber-tint); color: var(--amber); }
+.pill-ACCEPTED  { background: var(--green-tint);  color: var(--green); }
+.pill-DECLINED  { background: var(--red-tint);    color: var(--red); }
+.pill-teal      { background: var(--teal-tint);   color: var(--teal); }
+.pill-pink      { background: var(--pink-tint);   color: var(--pink); }
+.pill-tier1     { background: var(--green-tint);  color: var(--green); }
+.pill-tier2     { background: var(--primary-tint); color: var(--primary); }
+.pill-tier3     { background: var(--amber-tint);  color: var(--amber); }
+.pill-tier4     { background: var(--red-tint);    color: var(--red); }
+.pill-RETAIL    { background: var(--surface-2);   color: var(--text-dim); }
+.pill-MSME      { background: var(--teal-tint);   color: var(--teal); }
+
+/* Horizontal stacked distribution bar */
+.distbar { display: flex; height: 12px; border-radius: var(--r-pill); overflow: hidden; background: var(--surface-2); }
+.distbar > span { display: block; height: 100%; }
+.dist-legend { display: flex; flex-wrap: wrap; gap: 12px 18px; margin-top: 12px; }
+.dist-legend .item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-2); }
+.dist-legend .dot { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
+
+/* Pipeline split cards */
+.pipe-card { display: flex; flex-direction: column; gap: 4px; padding: 16px; border-radius: var(--r-lg); border: 1px solid var(--border); background: var(--surface); }
+.pipe-card .pipe-k { font-size: 26px; font-weight: 700; color: var(--text); }
+.pipe-card .pipe-l { font-size: 12px; color: var(--text-dim); }
+
+/* Anti-spiral gauge */
+.gauge-track { height: 10px; border-radius: var(--r-pill); background: var(--surface-2); overflow: hidden; position: relative; }
+.gauge-fill { height: 100%; border-radius: var(--r-pill); background: linear-gradient(to right, var(--green), var(--amber), var(--red)); }
+
+/* Risk × Intent matrix grid */
+.matrix-grid { display: grid; grid-template-columns: 130px repeat(3, 1fr); gap: 8px; }
+.matrix-grid .mh { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-dim); display: flex; align-items: center; padding: 6px 8px; }
+.matrix-grid .rh { font-weight: 600; font-size: 13px; display: flex; flex-direction: column; justify-content: center; padding: 8px; border-radius: var(--r-md); }
+.matrix-cell { border: 1px solid var(--border); border-radius: var(--r-md); padding: 12px; min-height: 86px; display: flex; flex-direction: column; gap: 6px; background: var(--surface); transition: box-shadow 120ms; }
+.matrix-cell .mc-dir { font-weight: 700; font-size: 13px; }
+.matrix-cell .mc-note { font-size: 11px; color: var(--text-dim); line-height: 1.4; }
+.matrix-cell .mc-count { margin-top: auto; font-size: 11px; color: var(--text-muted); }
+.matrix-cell.hot { box-shadow: 0 0 0 2px var(--primary); }
+.matrix-cell.inc { background: linear-gradient(180deg, var(--green-tint), var(--surface)); }
+.matrix-cell.dec { background: linear-gradient(180deg, var(--red-tint), var(--surface)); }
+.matrix-cell.frz { background: linear-gradient(180deg, var(--amber-tint), var(--surface)); }
+
+/* Signal-layer panel */
+.layer { border: 1px solid var(--border); border-radius: var(--r-lg); overflow: hidden; }
+.layer + .layer { margin-top: 10px; }
+.layer-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: var(--surface-2); }
+.layer-head .lnum { width: 22px; height: 22px; border-radius: 6px; background: var(--primary-tint); color: var(--primary); display: grid; place-items: center; font-size: 11px; font-weight: 700; flex-shrink: 0; }
+.layer-head .ltitle { font-weight: 600; font-size: 13px; }
+.layer-body { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px 16px; padding: 14px; }
+.layer-kv { display: flex; flex-direction: column; gap: 2px; }
+.layer-kv .k { font-size: 11px; color: var(--text-dim); }
+.layer-kv .v { font-size: 14px; font-weight: 600; color: var(--text); }
+
+/* Tenant archetype selector */
+.arche { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.arche-card { text-align: left; cursor: pointer; border: 1px solid var(--border); border-radius: var(--r-lg); padding: 18px; background: var(--surface); transition: all 120ms; }
+.arche-card:hover { border-color: var(--border-strong); }
+.arche-card.active { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(47,85,236,0.12); }
+.arche-card .a-name { font-weight: 700; font-size: 15px; margin-bottom: 2px; }
+.arche-card .a-sub { font-size: 12px; color: var(--text-dim); }

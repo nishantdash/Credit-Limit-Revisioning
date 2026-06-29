@@ -1,13 +1,30 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .db import Base, engine
-from .routes import analytics, customers, decisions, hitl, ingest, triggers, webhooks
+from .db import Base, SessionLocal, engine
+from .engine import config as cfg_mod
+from .routes import (
+    actions,
+    analytics,
+    config as config_route,
+    customers,
+    decisions,
+    ingest,
+    offers,
+    review,
+    triggers,
+    webhooks,
+)
 
 app = FastAPI(
-    title="CLR — Credit Limit Revisioning Engine",
-    description="Continuous, event-driven, AI-personalised credit-limit management prototype.",
-    version="0.1.0",
+    title="CLR — Intent-Driven Credit Limit Revisioning Engine",
+    description=(
+        "Real-time, intent-driven credit-limit revisioning. Disambiguates growth "
+        "vs distress vs seasonal, emits a four-part decision (direction, magnitude, "
+        "duration, confidence), and orchestrates consent-asymmetric offer/action "
+        "pipelines on India's AA + DPDP + RBI rails."
+    ),
+    version="1.0.0",
 )
 
 app.add_middleware(
@@ -20,27 +37,34 @@ app.add_middleware(
 
 Base.metadata.create_all(bind=engine)
 
-app.include_router(customers.router)
-app.include_router(decisions.router)
-app.include_router(hitl.router)
-app.include_router(triggers.router)
-app.include_router(webhooks.router)
-app.include_router(ingest.router)
-app.include_router(analytics.router)
+# Ensure the three tenant-config presets exist on boot.
+_db = SessionLocal()
+try:
+    cfg_mod.ensure_seeded(_db)
+finally:
+    _db.close()
+
+for r in (config_route, customers, decisions, offers, actions, review,
+          triggers, webhooks, ingest, analytics):
+    app.include_router(r.router)
 
 
 @app.get("/")
 def root():
     return {
         "name": "CLR",
-        "tagline": "Continuous credit-limit revisioning engine",
-        "layers": {
-            "L1_data": "/customers, /webhooks/hyperface/event",
-            "L2_ai": "internal — behavioral, income, risk, explainer",
-            "L3_decision": "/triggers/fire, /triggers/periodic-sweep, /hitl/queue",
-            "L5_integration": "/webhooks/hyperface/outbound/{decision_id}",
-            "L6_audit": "/analytics/audit-log",
-            "L7_analytics": "/analytics/funnel, /analytics/roi",
+        "tagline": "Real-time, intent-driven credit limit revisioning",
+        "pipeline": "knockout → 5 signal layers → risk/tier → intent → Risk×Intent matrix "
+                    "→ capacity/buffer formulas → anti-spiral guardrails → offer/action split",
+        "endpoints": {
+            "config": "/config (Bank/NBFC/SFB)",
+            "customers": "/customers",
+            "decisions": "/decisions",
+            "offers": "/offers (consent-gated increases)",
+            "actions": "/actions (applied decreases)",
+            "review": "/review/queue (low-confidence / manual)",
+            "triggers": "/triggers/fire, /triggers/micro-review-sweep",
+            "analytics": "/analytics/funnel, /analytics/roi, /analytics/guardrails",
         },
     }
 

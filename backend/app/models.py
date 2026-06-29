@@ -1,16 +1,25 @@
+"""SQLAlchemy models for the intent-driven CLR engine.
+
+The schema follows the concept note: customers carry the inputs to the five
+signal layers + hard-knockout flags; decisions carry the four-part output
+(direction, magnitude, duration, confidence) plus the intent, risk tier, and
+which orchestration pipeline (offer vs action) they belong to.
+"""
 from datetime import datetime
+
 from sqlalchemy import (
-    Column,
-    String,
-    Integer,
-    Float,
-    DateTime,
-    ForeignKey,
-    Boolean,
     JSON,
+    Boolean,
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
     Text,
 )
 from sqlalchemy.orm import relationship
+
 from .db import Base
 
 
@@ -18,16 +27,37 @@ class Customer(Base):
     __tablename__ = "customers"
     id = Column(String, primary_key=True)  # CIF-XXXX
     name = Column(String, nullable=False)
-    segment = Column(String, nullable=False)  # MASS / PREMIUM
+    entity_type = Column(String, default="RETAIL")  # RETAIL / MSME
+    segment = Column(String, default="MASS")  # MASS / PREMIUM / THIN_FILE
+    employment_type = Column(String, default="SALARIED")  # SALARIED / SELF_EMPLOYED / BUSINESS
+    programme_id = Column(String, default="AU-LIT")
+
+    # Layer 1 inputs (repayment & credit history)
     bureau_score = Column(Integer, nullable=False)
-    programme_id = Column(String, nullable=False)  # e.g., AU-LIT
     dpd_max_12m = Column(Integer, default=0)
+    account_vintage_months = Column(Integer, default=12)
+
+    # Affordability inputs (capacity cap)
     stated_income = Column(Float, nullable=False)
-    employment_type = Column(String, default="SALARIED")  # SALARIED / SELF_EMPLOYED
+    external_debt = Column(Float, default=0.0)  # other EMIs / obligations seen via AA
+
+    # Hard-knockout flags (§2.6 — evaluated first, bypass scoring)
+    fraud_flag = Column(Boolean, default=False)
+    legal_block_flag = Column(Boolean, default=False)
+
+    # Consent state (§6.3 — AA rail)
+    aa_consent_active = Column(Boolean, default=True)
+
+    # MSME-only fields (§9) — null for retail
+    trade_dpd_days = Column(Integer, nullable=True)        # DPD on supplier invoices
+    dscr = Column(Float, nullable=True)                    # debt-service coverage ratio
+    working_capital_utilization = Column(Float, nullable=True)
+    promoter_score = Column(Float, nullable=True)          # promoter personal score 0-100
+
     created_at = Column(DateTime, default=datetime.utcnow)
 
     cards = relationship("Card", back_populates="customer", cascade="all, delete-orphan")
-    income_signals = relationship("IncomeSignal", back_populates="customer", cascade="all, delete-orphan")
+    cashflow_signals = relationship("CashflowSignal", back_populates="customer", cascade="all, delete-orphan")
     decisions = relationship("Decision", back_populates="customer", cascade="all, delete-orphan")
 
 
@@ -36,10 +66,14 @@ class Card(Base):
     id = Column(String, primary_key=True)  # CARD-XXXX
     customer_id = Column(String, ForeignKey("customers.id"), nullable=False)
     current_limit = Column(Float, nullable=False)
-    current_balance = Column(Float, default=0.0)
-    benefits_tier = Column(String, default="SILVER")  # SILVER / GOLD / PLATINUM
+    outstanding = Column(Float, default=0.0)  # current drawn balance
+    statement_balance = Column(Float, default=0.0)  # last statement total
+    last_payment = Column(Float, default=0.0)  # amount paid against last statement
+    min_due_last = Column(Float, default=0.0)  # minimum due on last statement
+    peak_drawn_12m = Column(Float, default=0.0)  # peak outstanding in trailing 12m
+    months_since_last_change = Column(Integer, default=12)
+    months_inactive = Column(Integer, default=0)  # consecutive months util < 5%
     opened_at = Column(DateTime, default=datetime.utcnow)
-    months_at_current_limit = Column(Integer, default=12)
 
     customer = relationship("Customer", back_populates="cards")
     transactions = relationship("Transaction", back_populates="card", cascade="all, delete-orphan")
@@ -50,23 +84,29 @@ class Transaction(Base):
     id = Column(String, primary_key=True)
     card_id = Column(String, ForeignKey("cards.id"), nullable=False)
     amount = Column(Float, nullable=False)
+    # Category-mix vector input (§2.2): essential / discretionary / aspirational
+    category_class = Column(String, default="ESSENTIAL")
     merchant_category = Column(String)
-    merchant_tier = Column(String, default="STANDARD")  # STANDARD / PREMIUM
+    merchant_quality = Column(Float, default=0.6)  # 0-1 quality/consistency proxy
+    is_recurring = Column(Boolean, default=False)  # subscriptions / mandates
+    is_declined = Column(Boolean, default=False)   # high-value decline against limit
     merchant_city = Column(String)
     timestamp = Column(DateTime, default=datetime.utcnow)
 
     card = relationship("Card", back_populates="transactions")
 
 
-class IncomeSignal(Base):
-    __tablename__ = "income_signals"
+class CashflowSignal(Base):
+    """Layer 3 / Layer 5 inputs — inflows sourced via the AA rail."""
+    __tablename__ = "cashflow_signals"
     id = Column(Integer, primary_key=True, autoincrement=True)
     customer_id = Column(String, ForeignKey("customers.id"), nullable=False)
-    source = Column(String, nullable=False)  # CBS_SALARY / UPI_INFLOW / AA / GST
+    source = Column(String, nullable=False)  # CBS_SALARY / AA / UPI_INFLOW / GST / TRADE
     monthly_amount = Column(Float, nullable=False)
+    regularity = Column(Float, default=0.8)  # 0-1: consistency/predictability of the inflow
     as_of = Column(DateTime, default=datetime.utcnow)
 
-    customer = relationship("Customer", back_populates="income_signals")
+    customer = relationship("Customer", back_populates="cashflow_signals")
 
 
 class Decision(Base):
@@ -75,33 +115,62 @@ class Decision(Base):
     customer_id = Column(String, ForeignKey("customers.id"), nullable=False)
     card_id = Column(String, ForeignKey("cards.id"), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+    trigger_type = Column(String, nullable=False)
+    entity_type = Column(String, default="RETAIL")
+    tenant_archetype = Column(String, default="BANK")
+
+    # Risk
+    risk_tier = Column(Integer, nullable=False)  # 1..4
+    pd_pre = Column(Float, nullable=False)
+    pd_post_projected = Column(Float, nullable=False)
+
+    # Intent disambiguation (§3)
+    intent = Column(String, nullable=False)  # GROWTH / DISTRESS / SEASONAL / NEUTRAL / KNOCKOUT
+    intent_confidence = Column(Float, default=0.0)
+    matrix_cell = Column(String, default="")  # e.g. "Tier 3 × Growth"
+
+    # The four-part output (§3.3)
+    direction = Column(String, nullable=False)  # INCREASE / DECREASE / MAINTAIN / FREEZE
+    magnitude_pct = Column(Float, default=0.0)  # signed % change vs current limit
+    duration = Column(String, default="NA")     # PERMANENT / TEMPORARY / NA
+    confidence = Column(Float, default=0.0)
+    auto_revert_at = Column(DateTime, nullable=True)  # for TEMPORARY (seasonal)
 
     current_limit = Column(Float, nullable=False)
     recommended_limit = Column(Float, nullable=False)
-    decision = Column(String, nullable=False)  # UPGRADE / DOWNGRADE / FREEZE
-    confidence = Column(Float, nullable=False)
-    pd_pre = Column(Float, nullable=False)
-    pd_post_projected = Column(Float, nullable=False)
-    income_estimate = Column(Float, nullable=False)
-    behavioral_score = Column(Float, nullable=False)
-    reason_codes = Column(JSON, nullable=False)
-    explainer_text_officer = Column(Text, nullable=False)
-    explainer_text_customer = Column(Text, nullable=False)
-    trigger_type = Column(String, nullable=False)
 
-    hitl_required = Column(Boolean, default=False)
-    hitl_status = Column(String, default="N/A")  # N/A / PENDING / APPROVED / REJECTED
-    hitl_decided_by = Column(String, nullable=True)
-    hitl_decided_at = Column(DateTime, nullable=True)
-    hitl_notes = Column(Text, nullable=True)
+    # Affordability / capacity context
+    income_estimate = Column(Float, default=0.0)
+    external_debt = Column(Float, default=0.0)
+    capacity_headroom = Column(Float, default=0.0)  # affordable limit ceiling
 
-    benefits_tier_from = Column(String, nullable=True)
-    benefits_tier_to = Column(String, nullable=True)
+    # Explainability (§6.2)
+    reason_codes = Column(JSON, default=list)
+    knockouts = Column(JSON, default=list)
+    applied_caps = Column(JSON, default=list)       # guardrails that bound the decision
+    signal_snapshot = Column(JSON, default=dict)    # the 5-layer feature snapshot
+    explainer_officer = Column(Text, default="")
+    explainer_customer = Column(Text, default="")
+    consent_copy = Column(Text, default="")         # consent-as-value-lever copy (offers)
 
+    # Orchestration pipeline (§6.1 consent asymmetry)
+    pipeline = Column(String, default="NONE")  # OFFER / ACTION / NONE
+    # OFFER (increase): consent-gated, paused until OTP/MPIN
+    consent_status = Column(String, default="NA")  # NA / PENDING_CONSENT / ACCEPTED / DECLINED
+    consent_channel = Column(String, nullable=True)  # OTP / MPIN
+    consent_decided_at = Column(DateTime, nullable=True)
+
+    # Confidence gating → manual review (§3.3, §11)
+    review_required = Column(Boolean, default=False)
+    review_status = Column(String, default="NA")  # NA / PENDING / APPROVED / REJECTED
+    review_by = Column(String, nullable=True)
+    review_at = Column(DateTime, nullable=True)
+    review_notes = Column(Text, nullable=True)
+
+    # Execution / write-back
     executed = Column(Boolean, default=False)
     executed_at = Column(DateTime, nullable=True)
     customer_notified = Column(Boolean, default=False)
-    customer_accepted = Column(Boolean, nullable=True)
 
     customer = relationship("Customer", back_populates="decisions")
 
@@ -127,12 +196,13 @@ class TriggerEvent(Base):
     decision_id = Column(String, ForeignKey("decisions.id"), nullable=True)
 
 
-class PolicyConfig(Base):
-    __tablename__ = "policy_config"
+class TenantConfig(Base):
+    """The configurable SaaS layer (§8). One row per archetype; exactly one is
+    active. `config` holds the full externalised policy as JSON."""
+    __tablename__ = "tenant_config"
     id = Column(Integer, primary_key=True, autoincrement=True)
-    max_limit_multiple_of_income = Column(Float, default=3.0)
-    hitl_threshold_inr = Column(Float, default=50000.0)
-    min_months_at_current_limit = Column(Integer, default=6)
-    max_dpd_eligible_12m = Column(Integer, default=60)
-    pd_threshold_upgrade = Column(Float, default=0.05)
-    auto_freeze_pd = Column(Float, default=0.08)
+    name = Column(String, nullable=False)
+    archetype = Column(String, nullable=False)  # BANK / NBFC / SFB
+    active = Column(Boolean, default=False)
+    config = Column(JSON, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow)

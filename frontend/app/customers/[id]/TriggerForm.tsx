@@ -1,15 +1,16 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { api, Decision } from "../../../lib/api";
+import { api, Decision, DIRECTION_VARIANT } from "../../../lib/api";
 import { Icon } from "../../../components/Icon";
 import { Pill } from "../../../components/Pill";
 
 const EVENT_TYPES = [
-  { value: "CARD_UTILIZATION_THRESHOLD", label: "Utilisation threshold (>80%)" },
-  { value: "SPEND_SPIKE_DETECTED", label: "Spend spike detected" },
-  { value: "INCOME_STEPCHANGE", label: "Income step-change" },
-  { value: "PERIODIC_SWEEP", label: "Periodic sweep" },
+  { value: "SALARY_CREDIT", label: "Salary credit (AA)" },
+  { value: "UTILIZATION_THRESHOLD", label: "Utilisation threshold" },
+  { value: "DECLINED_HIGH_VALUE_TXN", label: "Declined high-value txn" },
+  { value: "MIN_DUE_DEPENDENCY_SLOPE", label: "Min-due dependency slope" },
+  { value: "AA_DATA_PUSH", label: "AA data push" },
 ];
 
 export function TriggerForm({ cardId }: { cardId: string }) {
@@ -46,8 +47,8 @@ export function TriggerForm({ cardId }: { cardId: string }) {
       </button>
       {result && (
         <div style={{ marginTop: 12, fontSize: 12 }} className="muted">
-          <Pill variant={result.decision}>{result.decision}</Pill>{" "}
-          {result.hitl_required ? "sent to HITL queue" : "auto-executed"}
+          <Pill variant={DIRECTION_VARIANT[result.direction]}>{result.direction}</Pill>{" "}
+          {result.pipeline === "OFFER" ? "→ consent-gated offer" : result.pipeline === "ACTION" ? "→ applied" : result.review_required ? "→ held for review" : "no change"}
         </div>
       )}
       {error && <div style={{ color: "var(--red)", fontSize: 12, marginTop: 10 }}>{error}</div>}
