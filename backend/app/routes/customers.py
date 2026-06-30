@@ -9,8 +9,10 @@ router = APIRouter(prefix="/customers", tags=["customers"])
 
 
 @router.get("", response_model=list[CustomerOut])
-def list_customers(db: Session = Depends(get_db)):
-    return db.query(Customer).order_by(Customer.id).all()
+def list_customers(limit: int = 500, db: Session = Depends(get_db)):
+    # Bound the payload so a large uploaded book doesn't make the page crawl.
+    # Seeded CIF-* ids sort before uploaded ids, so the demo roster stays visible.
+    return db.query(Customer).order_by(Customer.id).limit(limit).all()
 
 
 @router.get("/{customer_id}")

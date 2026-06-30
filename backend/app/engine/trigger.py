@@ -21,6 +21,12 @@ from . import config as cfg_mod
 from . import decision as decision_engine
 from . import orchestration
 
+# Each customer is a full engine run + DB commit. On a large book (e.g. a big
+# CSV upload) an uncapped sweep would run for many minutes and time out, so we
+# bound it. Ordered by created_at, so the seeded demo archetypes are always
+# covered first.
+MAX_SWEEP = 250
+
 
 def fire_event(db: Session, *, card_id: str, event_type: str,
                payload: Optional[dict[str, Any]] = None,
@@ -40,11 +46,16 @@ def fire_event(db: Session, *, card_id: str, event_type: str,
     return dec
 
 
-def micro_review_sweep(db: Session, config: Optional[cfg_mod.TenantConfig] = None) -> list[Decision]:
-    """Continuous micro-review across the book — replaces the quarterly batch."""
+def micro_review_sweep(db: Session, config: Optional[cfg_mod.TenantConfig] = None,
+                       limit: int = MAX_SWEEP) -> list[Decision]:
+    """Continuous micro-review across the book — replaces the quarterly batch.
+
+    Capped at `limit` customers per call so a large uploaded book can't hang the
+    request; seeded archetypes (created first) are always included.
+    """
     config = config or cfg_mod.load_active(db)
     decisions: list[Decision] = []
-    for customer in db.query(Customer).all():
+    for customer in db.query(Customer).order_by(Customer.created_at).limit(limit).all():
         if not customer.cards:
             continue
         card = customer.cards[0]
