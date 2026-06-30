@@ -798,11 +798,13 @@ input:focus, select:focus, textarea:focus {
    collapse the grids and keep any remaining wide table scrolling
    *inside its own card* rather than the whole viewport. */
 
-/* min-width:0 stops the 1fr content column from being blown out to
-   the width of its widest table (intrinsic min-content), which was
-   the root cause of page-level horizontal scroll. */
+/* THE fix: min-width:0 lets the content column and every grid/flex child shrink
+   below their intrinsic (widest-table) width. Without it a wide table stretches
+   its card, the card stretches the page, and the whole page scrolls sideways —
+   which reads as "not device compliant". */
 .shell > div { min-width: 0; }
 main { min-width: 0; max-width: 1400px; }
+.grid, .grid > *, .card, .row, .row-between { min-width: 0; }
 .table-wrap { -webkit-overflow-scrolling: touch; }
 
 /* Laptops / small desktops */
@@ -822,6 +824,7 @@ main { min-width: 0; max-width: 1400px; }
   .page-head { flex-direction: column; align-items: stretch; }
   .page-title { font-size: 21px; }
   .page-head .actions { flex-wrap: wrap; }
+  .row-between { flex-wrap: wrap; gap: 12px; }
 
   .grid { gap: 12px; }
   .grid.cols-3, .grid.cols-2 { grid-template-columns: 1fr; }
@@ -829,14 +832,37 @@ main { min-width: 0; max-width: 1400px; }
 
   .card { padding: 14px 16px; }
 
-  /* Denser tables so fewer columns overflow; the rest scrolls in-card */
   thead th, tbody td { padding: 10px 12px; }
   table { font-size: 12px; }
 
   /* Risk × Intent matrix: tighten so it fits without page scroll */
-  .matrix-grid { grid-template-columns: 84px repeat(3, minmax(80px, 1fr)); gap: 6px; }
-  .matrix-cell { padding: 9px; min-height: 74px; }
+  .matrix-grid { grid-template-columns: 76px repeat(3, minmax(74px, 1fr)); gap: 6px; }
+  .matrix-cell { padding: 8px; min-height: 70px; }
   .matrix-cell .mc-note { display: none; }
+}
+
+/* Phones: stack data tables into cards so they NEVER scroll horizontally.
+   Header text is shown per-cell via data-label where the markup provides it,
+   otherwise cells stack label-less (first cell stays the prominent identifier). */
+@media (max-width: 640px) {
+  .table-wrap { overflow-x: visible; padding: 8px 10px; }
+  table, thead, tbody, tr, th, td { display: block; width: auto; }
+  thead { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); border: 0; }
+  tbody tr { border: 1px solid var(--border); border-radius: var(--r-md); margin: 0 0 10px; padding: 4px 2px; background: var(--surface); }
+  tbody tr:hover td { background: transparent; }
+  tbody td {
+    border: none; padding: 8px 14px; display: flex; align-items: center;
+    justify-content: space-between; gap: 14px; text-align: right; min-height: 0;
+  }
+  tbody td:first-child {
+    font-weight: 700; color: var(--text); justify-content: flex-start;
+    text-align: left; padding-top: 10px;
+  }
+  td[data-label]::before {
+    content: attr(data-label); font-size: 11px; text-transform: uppercase;
+    letter-spacing: 0.5px; color: var(--text-dim); font-weight: 500;
+    margin-right: auto; text-align: left;
+  }
 }
 
 /* Small phones */

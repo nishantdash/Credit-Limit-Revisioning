@@ -53,16 +53,16 @@ export default async function ActionsPage() {
                           <Avatar id={d.customer_id} size="sm" /><span>{d.customer_id}</span>
                         </Link>
                       </td>
-                      <td className="muted" style={{ fontSize: 12 }}>{d.matrix_cell}</td>
-                      <td><Pill variant={INTENT_VARIANT[d.intent]} bare>{d.intent}</Pill></td>
-                      <td>
+                      <td data-label="Cell" className="muted" style={{ fontSize: 12 }}>{d.matrix_cell}</td>
+                      <td data-label="Intent"><Pill variant={INTENT_VARIANT[d.intent]} bare>{d.intent}</Pill></td>
+                      <td data-label="Limit change">
                         {inr(d.current_limit)} <Icon name="arrow-right" size={11} /> <strong>{inr(d.recommended_limit)}</strong>
                         <span style={{ color: "var(--red)", fontSize: 12, marginLeft: 6 }}>{d.magnitude_pct.toFixed(1)}%</span>
                       </td>
-                      <td className="muted">{inr(cut)} freed</td>
-                      <td className="muted">{(d.pd_pre * 100).toFixed(2)}% → {(d.pd_post_projected * 100).toFixed(2)}%</td>
-                      <td><div className="reasons">{d.reason_codes.slice(0, 2).map((r) => <span key={r} className="chip">{r}</span>)}</div></td>
-                      <td>{d.executed ? <Pill variant="ACCEPTED" bare>applied + notified</Pill> : <Pill variant="amber" bare>held</Pill>}</td>
+                      <td data-label="Buffer kept" className="muted">{inr(cut)} freed</td>
+                      <td data-label="PD pre → post" className="muted">{(d.pd_pre * 100).toFixed(2)}% → {(d.pd_post_projected * 100).toFixed(2)}%</td>
+                      <td data-label="Drivers"><div className="reasons">{d.reason_codes.slice(0, 2).map((r) => <span key={r} className="chip">{r}</span>)}</div></td>
+                      <td data-label="Status">{d.executed ? <Pill variant="ACCEPTED" bare>applied + notified</Pill> : <Pill variant="amber" bare>held</Pill>}</td>
                     </tr>
                   );
                 })}

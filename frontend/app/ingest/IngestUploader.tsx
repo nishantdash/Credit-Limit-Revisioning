@@ -258,23 +258,23 @@ function SweepResults({ sweep, total, remaining }: { sweep: CohortSweepResponse;
       </div>
       <div className="table-wrap">
         <table>
-          <thead><tr><th>Intent</th><th>Customer</th><th>Cell</th><th>Decision</th><th>Pipeline</th></tr></thead>
+          <thead><tr><th>Customer</th><th>Intent</th><th>Cell</th><th>Decision</th><th>Pipeline</th></tr></thead>
           <tbody>
             {sweep.decisions.map((d: Decision) => (
               <tr key={d.id}>
-                <td><Pill variant={INTENT_VARIANT[d.intent]} bare>{d.intent}</Pill></td>
                 <td>
                   <div className="row" style={{ gap: 10 }}>
                     <Avatar id={d.customer_id} size="sm" />
                     <Link href={`/customers/${d.customer_id}`} style={{ color: "var(--text)" }}>{d.customer_id}</Link>
                   </div>
                 </td>
-                <td className="muted" style={{ fontSize: 12 }}>{d.matrix_cell}</td>
-                <td>
+                <td data-label="Intent"><Pill variant={INTENT_VARIANT[d.intent]} bare>{d.intent}</Pill></td>
+                <td data-label="Cell" className="muted" style={{ fontSize: 12 }}>{d.matrix_cell}</td>
+                <td data-label="Decision">
                   <Pill variant={DIRECTION_VARIANT[d.direction]}>{d.direction}</Pill>{" "}
                   {d.direction !== "MAINTAIN" && d.direction !== "FREEZE" && <span className="muted" style={{ fontSize: 12 }}>{inr(d.current_limit)} <Icon name="arrow-right" size={11} /> {inr(d.recommended_limit)}</span>}
                 </td>
-                <td>{d.pipeline === "NONE" ? <span className="muted">—</span> : <Pill variant={d.pipeline} bare>{d.pipeline}</Pill>}</td>
+                <td data-label="Pipeline">{d.pipeline === "NONE" ? <span className="muted">—</span> : <Pill variant={d.pipeline} bare>{d.pipeline}</Pill>}</td>
               </tr>
             ))}
           </tbody>

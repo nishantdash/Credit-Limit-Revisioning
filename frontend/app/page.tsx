@@ -76,29 +76,29 @@ export default async function Dashboard() {
             <div className="table-wrap">
               <table>
                 <thead>
-                  <tr><th>Cell</th><th>Customer</th><th>Intent</th><th>Decision</th><th>Limit</th><th>Pipeline</th><th>Conf</th></tr>
+                  <tr><th>Customer</th><th>Cell</th><th>Intent</th><th>Decision</th><th>Limit</th><th>Pipeline</th><th>Conf</th></tr>
                 </thead>
                 <tbody>
                   {decisions.map((d) => (
                     <tr key={d.id}>
-                      <td className="muted" style={{ fontSize: 12 }} title={TIER_LABEL[d.risk_tier]}>{d.matrix_cell}</td>
                       <td>
                         <Link href={`/customers/${d.customer_id}`} className="row" style={{ color: "var(--text)" }}>
                           <Avatar id={d.customer_id} size="sm" /><span style={{ marginLeft: 8 }}>{d.customer_id}</span>
                         </Link>
                       </td>
-                      <td><Pill variant={INTENT_VARIANT[d.intent]} bare>{d.intent}</Pill></td>
-                      <td>
+                      <td data-label="Cell" className="muted" style={{ fontSize: 12 }} title={TIER_LABEL[d.risk_tier]}>{d.matrix_cell}</td>
+                      <td data-label="Intent"><Pill variant={INTENT_VARIANT[d.intent]} bare>{d.intent}</Pill></td>
+                      <td data-label="Decision">
                         <Pill variant={DIRECTION_VARIANT[d.direction]}>{d.direction}</Pill>
                         {d.duration === "TEMPORARY" && <span style={{ marginLeft: 6 }}><Pill variant="TEMPORARY" bare>temp</Pill></span>}
                       </td>
-                      <td className="muted" style={{ fontSize: 13 }}>
+                      <td data-label="Limit" className="muted" style={{ fontSize: 13 }}>
                         {d.direction === "MAINTAIN" || d.direction === "FREEZE"
                           ? inr(d.current_limit)
                           : <>{inr(d.current_limit)} <Icon name="arrow-right" size={11} /> <strong style={{ color: "var(--text)" }}>{inr(d.recommended_limit)}</strong></>}
                       </td>
-                      <td>{d.pipeline === "NONE" ? <span className="muted">—</span> : <Pill variant={d.pipeline} bare>{d.pipeline}</Pill>}</td>
-                      <td className="muted">{(d.confidence * 100).toFixed(0)}%</td>
+                      <td data-label="Pipeline">{d.pipeline === "NONE" ? <span className="muted">—</span> : <Pill variant={d.pipeline} bare>{d.pipeline}</Pill>}</td>
+                      <td data-label="Confidence" className="muted">{(d.confidence * 100).toFixed(0)}%</td>
                     </tr>
                   ))}
                 </tbody>

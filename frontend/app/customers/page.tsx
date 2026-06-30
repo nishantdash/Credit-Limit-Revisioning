@@ -73,13 +73,13 @@ export default async function CustomersPage() {
                         </div>
                       </div>
                     </td>
-                    <td className="mono muted">{c.id}</td>
-                    <td><Pill variant={c.entity_type} bare>{c.entity_type}</Pill></td>
-                    <td><span style={{ color: c.bureau_score >= 750 ? "var(--green)" : c.bureau_score >= 700 ? "var(--text)" : "var(--amber)" }}>{c.bureau_score}</span></td>
-                    <td>{d?.latest_tier ? <Pill variant={`tier${d.latest_tier}`} bare>T{d.latest_tier}</Pill> : <span className="muted">—</span>}</td>
-                    <td>{d?.latest_intent ? <Pill variant={INTENT_VARIANT[d.latest_intent]} bare>{d.latest_intent}</Pill> : <span className="muted">—</span>}</td>
-                    <td>{card ? inrCompact(card.current_limit) : "—"}</td>
-                    <td style={{ minWidth: 150 }}>
+                    <td data-label="CIF" className="mono muted">{c.id}</td>
+                    <td data-label="Type"><Pill variant={c.entity_type} bare>{c.entity_type}</Pill></td>
+                    <td data-label="Bureau"><span style={{ color: c.bureau_score >= 750 ? "var(--green)" : c.bureau_score >= 700 ? "var(--text)" : "var(--amber)" }}>{c.bureau_score}</span></td>
+                    <td data-label="Tier">{d?.latest_tier ? <Pill variant={`tier${d.latest_tier}`} bare>T{d.latest_tier}</Pill> : <span className="muted">—</span>}</td>
+                    <td data-label="Latest intent">{d?.latest_intent ? <Pill variant={INTENT_VARIANT[d.latest_intent]} bare>{d.latest_intent}</Pill> : <span className="muted">—</span>}</td>
+                    <td data-label="Limit">{card ? inrCompact(card.current_limit) : "—"}</td>
+                    <td data-label="Utilisation" style={{ minWidth: 150 }}>
                       {card ? (
                         <div className="row" style={{ gap: 8 }}>
                           <div className={`progress ${utilColor}`} style={{ flex: 1, maxWidth: 90 }}><div style={{ width: `${Math.min(util, 100)}%` }} /></div>
