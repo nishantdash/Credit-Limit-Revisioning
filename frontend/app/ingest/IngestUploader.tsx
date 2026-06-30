@@ -18,6 +18,8 @@ import { Pill } from "../../components/Pill";
 
 type Preview = { headers: string[]; rows: string[][]; rowCount: number };
 
+const SWEEP_BATCH = 250; // matches backend MAX_COHORT_SWEEP
+
 export function IngestUploader() {
   const router = useRouter();
   const fileInput = useRef<HTMLInputElement>(null);
@@ -54,13 +56,19 @@ export function IngestUploader() {
 
   async function runSweep() {
     if (!summary || summary.known_customer_ids.length === 0) return;
-    setBusy("sweeping"); setError(null); setSweep(null);
+    setBusy("sweeping"); setError(null);
+    // Sweep only customers not yet scored so re-running advances the cohort
+    // (the backend caps each request at 250 to stay responsive).
+    const swept = new Set(sweep?.decisions.map((d) => d.customer_id) ?? []);
+    const remaining = summary.known_customer_ids.filter((id) => !swept.has(id));
+    const batch = remaining.length ? remaining : summary.known_customer_ids;
     try {
       const result = await api<CohortSweepResponse>("/ingest/cohort-sweep", {
         method: "POST",
-        body: JSON.stringify({ customer_ids: summary.known_customer_ids }),
+        body: JSON.stringify({ customer_ids: batch }),
       });
-      setSweep(result);
+      const prior = sweep?.decisions.filter((d) => !result.decisions.some((r) => r.id === d.id)) ?? [];
+      setSweep({ ...result, decisions: [...prior, ...result.decisions] });
       router.refresh();
     } catch (e: unknown) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy("idle"); }
@@ -70,6 +78,10 @@ export function IngestUploader() {
     setFile(null); setPreview(null); setSummary(null); setSweep(null); setError(null);
     if (fileInput.current) fileInput.current.value = "";
   }
+
+  const sweptCount = sweep?.decisions.length ?? 0;
+  const cohortSize = summary?.known_customer_ids.length ?? 0;
+  const remainingCount = Math.max(0, cohortSize - sweptCount);
 
   return (
     <div className="grid" style={{ gap: 16 }}>
@@ -186,23 +198,35 @@ export function IngestUploader() {
 
           <div className="row-between">
             <div>
-              <div style={{ fontWeight: 600 }}>Cohort ready · {summary.known_customer_ids.length} customers</div>
-              <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>{summary.known_customer_ids.join(", ") || "—"}</div>
+              <div style={{ fontWeight: 600 }}>
+                Cohort ready · {summary.known_customer_ids.length} customers
+                {sweptCount > 0 && <span className="muted" style={{ fontWeight: 400 }}> · {sweptCount} scored</span>}
+              </div>
+              <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                {summary.known_customer_ids.slice(0, 24).join(", ") || "—"}
+                {summary.known_customer_ids.length > 24 && ` +${summary.known_customer_ids.length - 24} more`}
+              </div>
             </div>
-            <button className="btn btn-primary" onClick={runSweep} disabled={busy !== "idle" || summary.known_customer_ids.length === 0}>
+            <button className="btn btn-primary" onClick={runSweep} disabled={busy !== "idle" || remainingCount === 0}>
               <Icon name="bolt" size={14} />
-              {busy === "sweeping" ? "Running CLR…" : `Run CLR on ${summary.known_customer_ids.length} customers`}
+              {busy === "sweeping"
+                ? "Running CLR…"
+                : sweptCount === 0
+                ? `Run CLR on ${Math.min(SWEEP_BATCH, summary.known_customer_ids.length)} customers`
+                : remainingCount > 0
+                ? `Sweep next ${Math.min(SWEEP_BATCH, remainingCount)} · ${remainingCount} left`
+                : "All scored ✓"}
             </button>
           </div>
         </div>
       )}
 
-      {sweep && <SweepResults sweep={sweep} />}
+      {sweep && <SweepResults sweep={sweep} total={cohortSize} remaining={remainingCount} />}
     </div>
   );
 }
 
-function SweepResults({ sweep }: { sweep: CohortSweepResponse }) {
+function SweepResults({ sweep, total, remaining }: { sweep: CohortSweepResponse; total: number; remaining: number }) {
   const increases = sweep.decisions.filter((d) => d.direction === "INCREASE").length;
   const decreases = sweep.decisions.filter((d) => d.direction === "DECREASE").length;
   const holds = sweep.decisions.filter((d) => d.direction === "MAINTAIN" || d.direction === "FREEZE").length;
@@ -214,11 +238,22 @@ function SweepResults({ sweep }: { sweep: CohortSweepResponse }) {
         <span className="muted" style={{ fontSize: 12 }}>{offers} offers · {decreases} decreases applied</span>
       </div>
       <div style={{ padding: 16 }}>
+        {remaining > 0 && (
+          <div className="banner amber" style={{ marginBottom: 16 }}>
+            <Icon name="info" size={18} />
+            <div>
+              <span className="banner-title">Scored {sweep.decisions.length} of {total} — {remaining} still to go.</span>
+              <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
+                Each run scores up to {SWEEP_BATCH} customers to stay responsive. Click <strong>Sweep next</strong> above to continue through the cohort.
+              </div>
+            </div>
+          </div>
+        )}
         <div className="grid cols-4" style={{ marginBottom: 16 }}>
           <Stat label="Increase offers" value={increases.toString()} color="green" />
           <Stat label="Decreases" value={decreases.toString()} color="red" />
           <Stat label="Hold / freeze" value={holds.toString()} color="amber" />
-          <Stat label="Swept" value={sweep.swept.toString()} />
+          <Stat label="Scored" value={`${sweep.decisions.length}${total > sweep.decisions.length ? ` / ${total}` : ""}`} />
         </div>
       </div>
       <div className="table-wrap">

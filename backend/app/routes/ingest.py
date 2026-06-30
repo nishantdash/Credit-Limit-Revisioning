@@ -44,6 +44,7 @@ router = APIRouter(prefix="/ingest", tags=["ingest"])
 
 REQUIRED_COL = "customer_id"
 MAX_ROWS = 10_000
+MAX_COHORT_SWEEP = 250  # customers scored per cohort-sweep request (rest deferred)
 VALID_CATEGORIES = {"ESSENTIAL", "DISCRETIONARY", "ASPIRATIONAL"}
 
 # Normalised source header -> canonical field. Lets a raw CBS export map onto
@@ -85,6 +86,7 @@ class CohortSweepRequest(BaseModel):
 class CohortSweepResponse(BaseModel):
     requested: int
     swept: int
+    deferred: int  # over the per-request cap — re-run to sweep the rest
     skipped_unknown: list[str]
     decisions: list[DecisionOut]
 
@@ -303,10 +305,15 @@ async def upload_transactions_csv(file: UploadFile = File(...), db: Session = De
 def cohort_sweep(req: CohortSweepRequest, db: Session = Depends(get_db)):
     if not req.customer_ids:
         raise HTTPException(400, "customer_ids cannot be empty")
+    # Each decision is a full engine run + DB commit (~0.1-0.8s). Cap the work per
+    # request so a multi-thousand-row upload can't run for an hour and time out the
+    # browser — the caller re-runs to sweep the deferred remainder.
+    to_sweep = req.customer_ids[:MAX_COHORT_SWEEP]
+    deferred = max(0, len(req.customer_ids) - len(to_sweep))
     config = cfg_mod.load_active(db)
     decisions: list[Decision] = []
     skipped: list[str] = []
-    for cif in req.customer_ids:
+    for cif in to_sweep:
         customer = db.query(Customer).filter(Customer.id == cif).first()
         if not customer or not customer.cards:
             skipped.append(cif)
@@ -324,12 +331,13 @@ def cohort_sweep(req: CohortSweepRequest, db: Session = Depends(get_db)):
     db.add(AuditLog(entity_type="Ingest", entity_id="cohort-sweep", action="COHORT_SWEEP_RUN",
                     actor="dashboard_user",
                     payload={"requested": len(req.customer_ids), "swept": len(decisions),
-                             "skipped_unknown": skipped}))
+                             "deferred": deferred, "skipped_unknown": skipped}))
     db.commit()
     for d in decisions:
         db.refresh(d)
     return CohortSweepResponse(
-        requested=len(req.customer_ids), swept=len(decisions), skipped_unknown=skipped,
+        requested=len(req.customer_ids), swept=len(decisions), deferred=deferred,
+        skipped_unknown=skipped,
         decisions=[DecisionOut.model_validate(d) for d in decisions],
     )
 

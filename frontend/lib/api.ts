@@ -173,6 +173,7 @@ export type IngestSummary = {
 export type CohortSweepResponse = {
   requested: number;
   swept: number;
+  deferred: number;
   skipped_unknown: string[];
   decisions: Decision[];
 };
