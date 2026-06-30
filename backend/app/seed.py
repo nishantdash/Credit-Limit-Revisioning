@@ -27,6 +27,11 @@ CITIES = ["Bengaluru", "Mumbai", "Delhi", "Pune", "Hyderabad", "Chennai"]
 
 MQ = {"ESSENTIAL": 0.50, "DISCRETIONARY": 0.65, "ASPIRATIONAL": 0.85}
 
+# Customers pre-scored at boot so the dashboard renders by default. Bounded to
+# keep startup fast on the free tier (archetypes are created first, so they're
+# always covered); the rest are scored on demand via the sweep tools.
+SEED_SWEEP_LIMIT = 200
+
 
 def _window(card_id, day_lo, day_hi, total, shares, seasonal=False, recurrence=0.0,
             mq_offset=0.0, declines=0):
@@ -240,7 +245,27 @@ def seed(reset: bool = True):
             signals=[("GST", 260_000, 0.9), ("TRADE", 240_000, 0.88), ("AA", 250_000, 0.9)])
 
         db.commit()
-        print(f"Seeded {db.query(Customer).count()} customers across the Risk × Intent matrix.")
+        print(f"Seeded {db.query(Customer).count()} synthetic archetypes across the Risk × Intent matrix.")
+
+        # Real CBS export — load alongside the archetypes so the dashboard renders
+        # real-account data by default. Resilient: a CSV problem must not break boot.
+        try:
+            from . import csv_seed
+            csv_seed.load(db)
+        except Exception as exc:  # noqa: BLE001 — boot must survive a bad/missing CSV
+            print(f"[seed] CSV load skipped ({exc!r})")
+
+        # Generate decisions so the dashboard/matrix/pipelines are populated on first
+        # load. Bounded (seeds first) to keep boot time safe on the free tier; the
+        # rest are scored on demand via the sweep / cohort-sweep tools.
+        try:
+            from .engine import trigger as trigger_engine
+            decided = trigger_engine.micro_review_sweep(db, limit=SEED_SWEEP_LIMIT)
+            print(f"[seed] pre-scored {len(decided)} customers for the default dashboard.")
+        except Exception as exc:  # noqa: BLE001
+            print(f"[seed] pre-sweep skipped ({exc!r})")
+
+        print(f"Total customers in book: {db.query(Customer).count()}")
     finally:
         db.close()
 
