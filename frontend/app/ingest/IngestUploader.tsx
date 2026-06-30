@@ -144,15 +144,28 @@ export function IngestUploader() {
           <div className="grid cols-4" style={{ marginBottom: 16 }}>
             <Stat label="Rows parsed" value={summary.rows_total.toString()} />
             <Stat label="Txns ingested" value={summary.transactions_ingested.toString()} />
-            <Stat label="Known customers" value={summary.known_customer_ids.length.toString()} color="green" />
-            <Stat label="Unknown" value={summary.unknown_customer_ids.length.toString()} color={summary.unknown_customer_ids.length ? "amber" : undefined} />
+            <Stat label="Attached to roster" value={(summary.known_customer_ids.length - summary.created_customer_ids.length).toString()} color="green" />
+            <Stat label="New customers" value={summary.created_customer_ids.length.toString()} color={summary.created_customer_ids.length ? "green" : undefined} />
           </div>
+
+          {summary.created_customer_ids.length > 0 && (
+            <div className="banner" style={{ marginBottom: 14 }}>
+              <Icon name="users" size={18} />
+              <div>
+                <span className="banner-title">{summary.created_customer_ids.length} new customer{summary.created_customer_ids.length > 1 ? "s" : ""} created from the file.</span>
+                <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>IDs not in the roster were bootstrapped — profile derived from uploaded spend (override with name / income / limit / bureau_score columns).</div>
+                <div className="reasons" style={{ marginTop: 8 }}>
+                  {summary.created_customer_ids.map((c) => <span key={c} className="chip">{c}</span>)}
+                </div>
+              </div>
+            </div>
+          )}
 
           {summary.unknown_customer_ids.length > 0 && (
             <div className="banner amber" style={{ marginBottom: 14 }}>
               <Icon name="alert-circle" size={18} />
               <div>
-                <span className="banner-title">{summary.unknown_customer_ids.length} CIF{summary.unknown_customer_ids.length > 1 ? "s" : ""} not in CLR roster — skipped.</span>
+                <span className="banner-title">{summary.unknown_customer_ids.length} row group{summary.unknown_customer_ids.length > 1 ? "s" : ""} skipped.</span>
                 <div className="reasons" style={{ marginTop: 8 }}>
                   {summary.unknown_customer_ids.map((c) => <span key={c} className="chip">{c}</span>)}
                 </div>

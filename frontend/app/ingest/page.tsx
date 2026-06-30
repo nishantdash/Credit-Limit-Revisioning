@@ -36,9 +36,20 @@ export default function IngestPage() {
                   <span className="chip">merchant_city</span>
                 </div>
               </div>
+              <div style={{ marginBottom: 14 }}>
+                <strong>New-customer columns</strong>
+                <div className="muted" style={{ fontSize: 12, margin: "2px 0 4px" }}>Used when an ID isn&apos;t in the roster.</div>
+                <div className="reasons" style={{ marginTop: 4 }}>
+                  <span className="chip">name</span>
+                  <span className="chip">stated_income</span>
+                  <span className="chip">current_limit</span>
+                  <span className="chip">bureau_score</span>
+                </div>
+              </div>
               <p className="muted" style={{ fontSize: 12, marginTop: 12 }}>
-                Rows attach to existing customers in the CLR roster.
-                Unknown CIFs are surfaced as warnings but skipped from the cohort sweep.
+                Headers match common aliases (cif, amt, txn_date, mcc, city…).
+                Known IDs attach to the existing customer; any new ID is bootstrapped
+                into a fresh customer record so it flows into the cohort sweep.
               </p>
             </div>
             <a className="btn" href={`${API_BASE}/ingest/sample-csv`} download style={{ marginTop: 10, width: "100%", justifyContent: "center" }}>

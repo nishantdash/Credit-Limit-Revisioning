@@ -165,6 +165,7 @@ export type IngestSummary = {
   transactions_ingested: number;
   cohort_customer_ids: string[];
   known_customer_ids: string[];
+  created_customer_ids: string[];
   unknown_customer_ids: string[];
   errors: string[];
 };
